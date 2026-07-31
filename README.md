@@ -20,8 +20,9 @@ Admin 暂未纳入 CLI。
 
 ## 安装
 
-开发和当前的本地安装方式需要 rbenv 管理的 Ruby 3.2 或更高版本。项目的
-`.ruby-version` 当前为 Ruby 4.0.1。
+开发和当前的本地安装方式需要 Ruby 3.2 或更高版本。项目的 `.ruby-version`
+当前为 Ruby 4.0.1；本机安装时若存在 rbenv，`make install-local` 会优先使用它，
+否则使用 PATH 中的 `ruby` 与 `gem`，以兼容 CI 运行环境。
 
 ```sh
 rbenv exec bundle install
