@@ -9,7 +9,8 @@ class CiWorkflowTest < Minitest::Test
 
     workflow = File.read(workflow_path)
 
-    assert_match(/^on:\n  pull_request:\n  push:\n    branches: \[main\]/, workflow)
+    assert_match(/^on:\n  pull_request:\n  push:/, workflow)
+    refute_includes workflow, 'branches: [main]'
     assert_includes workflow, 'uses: ruby/setup-ruby@v1'
     assert_includes workflow, 'bundle exec rake test'
     assert_includes workflow, 'bundle exec rubocop --format simple'
