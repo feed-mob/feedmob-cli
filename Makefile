@@ -1,5 +1,13 @@
-RUBY = rbenv exec ruby
-GEM = rbenv exec gem
+RBENV := $(shell command -v rbenv 2>/dev/null)
+
+ifeq ($(strip $(RBENV)),)
+RUBY ?= ruby
+GEM ?= gem
+else
+RUBY ?= rbenv exec ruby
+GEM ?= rbenv exec gem
+endif
+
 PREFIX ?= $(HOME)/.local
 GEM_HOME ?= $(PREFIX)/share/feedmob-cli/gems
 GEM_BIN = $(GEM_HOME)/bin
