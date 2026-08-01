@@ -1,0 +1,73 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'fileutils'
+require 'optparse'
+
+options = {}
+OptionParser.new do |parser|
+  parser.on('--version VERSION') { |value| options[:version] = value }
+  parser.on('--arm64-asset-id ID') { |value| options[:arm64_asset_id] = value }
+  parser.on('--arm64-sha256 SHA256') { |value| options[:arm64_sha256] = value }
+  parser.on('--x86-64-asset-id ID') { |value| options[:x86_64_asset_id] = value }
+  parser.on('--x86-64-sha256 SHA256') { |value| options[:x86_64_sha256] = value }
+  parser.on('--output PATH') { |path| options[:output] = File.expand_path(path) }
+end.parse!
+
+version = options.fetch(:version)
+arm64_asset_id = options.fetch(:arm64_asset_id)
+arm64_sha256 = options.fetch(:arm64_sha256)
+x86_64_asset_id = options.fetch(:x86_64_asset_id)
+x86_64_sha256 = options.fetch(:x86_64_sha256)
+output = options.fetch(:output)
+
+abort "Invalid version: #{version}" unless version.match?(/\A\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?\z/)
+{
+  'arm64 asset ID' => arm64_asset_id,
+  'x86_64 asset ID' => x86_64_asset_id
+}.each do |name, value|
+  abort "Invalid #{name}: #{value}" unless value.match?(/\A\d+\z/)
+end
+{
+  'arm64 SHA-256' => arm64_sha256,
+  'x86_64 SHA-256' => x86_64_sha256
+}.each do |name, value|
+  abort "Invalid #{name}: #{value}" unless value.match?(/\A[0-9a-f]{64}\z/)
+end
+
+formula = <<~RUBY
+  class Fm < Formula
+    desc "Command-line interface for FeedMob services"
+    homepage "https://github.com/feed-mob/feedmob-cli"
+    version "#{version}"
+    license "MIT"
+
+    github_token = ENV.fetch("HOMEBREW_GITHUB_API_TOKEN")
+    download_headers = [
+      "Accept: application/octet-stream",
+      "Authorization: Bearer \#{github_token}",
+    ]
+
+    if Hardware::CPU.arm?
+      url "https://api.github.com/repos/feed-mob/feedmob-cli/releases/assets/#{arm64_asset_id}",
+          headers: download_headers
+      sha256 "#{arm64_sha256}"
+    else
+      url "https://api.github.com/repos/feed-mob/feedmob-cli/releases/assets/#{x86_64_asset_id}",
+          headers: download_headers
+      sha256 "#{x86_64_sha256}"
+    end
+
+    def install
+      bin.install "fm"
+    end
+
+    test do
+      assert_match version.to_s, shell_output("\#{bin}/fm --json version")
+    end
+  end
+RUBY
+
+FileUtils.mkdir_p(File.dirname(output))
+File.write(output, formula)
+puts "Rendered private Homebrew Formula: #{output}"

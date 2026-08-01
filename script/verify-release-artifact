@@ -1,0 +1,61 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'open3'
+require 'optparse'
+require 'json'
+require 'rbconfig'
+require 'tmpdir'
+require_relative '../lib/feedmob/cli/version'
+
+options = {}
+OptionParser.new do |parser|
+  parser.on('--architecture ARCH', %w[arm64 x86_64]) { |architecture| options[:architecture] = architecture }
+end.parse!
+
+architecture = options.fetch(:architecture)
+artifact = File.expand_path(ARGV.fetch(0))
+architectures_stdout, _architectures_stderr, architectures_status = Open3.capture3('lipo', '-archs', artifact)
+abort "#{artifact} is not a Mach-O executable" unless architectures_status.success?
+
+architectures = architectures_stdout.split
+compatible_architectures = architecture == 'arm64' ? %w[arm64 arm64e] : ['x86_64']
+unless architectures.intersect?(compatible_architectures)
+  abort "#{artifact} does not contain #{architecture} code (found: #{architectures.join(', ')})"
+end
+
+puts "Top-level architecture: #{architecture}"
+
+Dir.mktmpdir('feedmob-cli-release-extract') do |extracted_root|
+  extract_stdout, extract_stderr, extract_status = Open3.capture3(
+    artifact, '--tebako-extract', extracted_root
+  )
+  abort "Could not extract #{artifact}: #{extract_stderr}#{extract_stdout}" unless extract_status.success?
+
+  tree_stdout, tree_stderr, tree_status = Open3.capture3(
+    RbConfig.ruby,
+    File.join(__dir__, 'verify-release-tree'),
+    '--architecture', architecture,
+    extracted_root
+  )
+  abort tree_stderr unless tree_status.success?
+
+  print tree_stdout
+end
+
+Dir.mktmpdir('feedmob-cli-release-home') do |temporary_home|
+  version_stdout, version_stderr, version_status = Open3.capture3(
+    { 'HOME' => temporary_home, 'PATH' => '/usr/bin:/bin' },
+    artifact, '--json', 'version',
+    unsetenv_others: true
+  )
+  abort "Version smoke failed: #{version_stderr}#{version_stdout}" unless version_status.success?
+
+  version_payload = JSON.parse(version_stdout)
+  version = version_payload.dig('data', 'version')
+  unless version_payload['ok'] == true && version == FeedMob::CLI::VERSION
+    abort "Version smoke returned an unexpected payload: #{version_stdout}"
+  end
+
+  puts "Version smoke: #{version}"
+end

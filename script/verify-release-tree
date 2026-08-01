@@ -1,0 +1,31 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'find'
+require 'open3'
+require 'optparse'
+
+options = {}
+OptionParser.new do |parser|
+  parser.on('--architecture ARCH', %w[arm64 x86_64]) { |architecture| options[:architecture] = architecture }
+end.parse!
+
+architecture = options.fetch(:architecture)
+root = File.expand_path(ARGV.fetch(0))
+compatible_architectures = architecture == 'arm64' ? %w[arm64 arm64e] : ['x86_64']
+mach_o_count = 0
+
+Find.find(root) do |path|
+  next unless File.file?(path)
+
+  architectures_stdout, _architectures_stderr, architectures_status = Open3.capture3('lipo', '-archs', path)
+  next unless architectures_status.success?
+
+  mach_o_count += 1
+  architectures = architectures_stdout.split
+  next if architectures.intersect?(compatible_architectures)
+
+  abort "#{path} does not contain #{architecture} code (found: #{architectures.join(', ')})"
+end
+
+puts "Embedded Mach-O files: #{mach_o_count}"

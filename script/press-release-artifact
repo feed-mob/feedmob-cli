@@ -1,0 +1,63 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'fileutils'
+require 'optparse'
+require 'rbconfig'
+require 'tmpdir'
+require 'yaml'
+
+options = { config: File.expand_path('../packaging/release.yml', __dir__) }
+OptionParser.new do |parser|
+  parser.on('--config PATH') { |path| options[:config] = File.expand_path(path) }
+  parser.on('--architecture ARCH', %w[arm64 x86_64]) { |architecture| options[:architecture] = architecture }
+  parser.on('--tebako PATH') { |path| options[:tebako] = File.expand_path(path) }
+  parser.on('--output PATH') { |path| options[:output] = File.expand_path(path) }
+end.parse!
+
+architecture = options.fetch(:architecture)
+tebako = options.fetch(:tebako)
+output = options.fetch(:output)
+config_path = options.fetch(:config)
+config = YAML.safe_load_file(config_path, aliases: false).fetch('tebako')
+ruby_version = config.fetch('ruby_version')
+format_version = config.fetch('format_version')
+FileUtils.mkdir_p(File.dirname(output))
+
+verified = system(
+  RbConfig.ruby,
+  File.join(__dir__, 'verify-tebako-tool'),
+  '--config', config_path,
+  '--architecture', architecture,
+  tebako
+)
+abort 'Tebako tool verification failed' unless verified
+
+Dir.mktmpdir('feedmob-cli-release-build') do |temporary_directory|
+  release_root = File.join(temporary_directory, 'root')
+  packaging_prefix = File.join(temporary_directory, 'tebako')
+  prepared = system(RbConfig.ruby, File.join(__dir__, 'prepare-release-root'), release_root)
+  abort 'Could not prepare the release root' unless prepared
+
+  pressed = system(
+    tebako, 'press',
+    '-r', release_root,
+    '-e', 'exe/fm',
+    '-o', output,
+    '-R', ruby_version,
+    '-m', 'fat',
+    '--tebako-version', format_version,
+    '-p', packaging_prefix
+  )
+  abort 'Tebako press failed' unless pressed
+end
+
+validated = system(
+  RbConfig.ruby,
+  File.join(__dir__, 'verify-release-artifact'),
+  '--architecture', architecture,
+  output
+)
+abort 'Release artifact validation failed' unless validated
+
+puts "Created validated release artifact: #{output}"

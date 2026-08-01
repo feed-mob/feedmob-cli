@@ -1,0 +1,9 @@
+tebako:
+  release_version: "0.1.0"
+  format_version: "0.15.9"
+  ruby_version: "4.0.1"
+  assets:
+    macos-arm64:
+      sha256: "f4d5ad287a4a1721f111320a8c61febca143332e4788a337750a107f496acbd4"
+    macos-x86_64:
+      sha256: "211b39a3e79a241da0836f7d3caa216512f68bbfe982bec715770078b25c2011"
