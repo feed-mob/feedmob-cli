@@ -1,0 +1,38 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'digest'
+require 'open3'
+require 'optparse'
+require 'yaml'
+
+options = { config: File.expand_path('../packaging/release.yml', __dir__) }
+OptionParser.new do |parser|
+  parser.on('--config PATH') { |path| options[:config] = File.expand_path(path) }
+  parser.on('--architecture ARCH', %w[arm64 x86_64]) { |architecture| options[:architecture] = architecture }
+end.parse!
+
+architecture = options.fetch(:architecture)
+tool = File.expand_path(ARGV.fetch(0))
+platform = "macos-#{architecture}"
+config = YAML.safe_load_file(options.fetch(:config), aliases: false).fetch('tebako')
+expected_sha256 = config.fetch('assets').fetch(platform).fetch('sha256')
+actual_sha256 = Digest::SHA256.file(tool).hexdigest
+
+unless actual_sha256 == expected_sha256
+  abort "SHA-256 mismatch for #{tool}: expected #{expected_sha256}, got #{actual_sha256}"
+end
+
+architectures_stdout, _architectures_stderr, architectures_status = Open3.capture3('lipo', '-archs', tool)
+abort "#{tool} is not a Mach-O executable" unless architectures_status.success?
+
+architectures = architectures_stdout.split
+compatible_architectures = architecture == 'arm64' ? %w[arm64 arm64e] : ['x86_64']
+unless architectures.intersect?(compatible_architectures)
+  abort "#{tool} does not contain #{architecture} code (found: #{architectures.join(', ')})"
+end
+
+puts "Tebako tool verified for #{platform}"
+puts "Release: #{config.fetch('release_version')}"
+puts "Format/runtime line: #{config.fetch('format_version')}"
+puts "Ruby: #{config.fetch('ruby_version')}"

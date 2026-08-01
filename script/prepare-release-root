@@ -1,0 +1,16 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'fileutils'
+
+project_root = File.expand_path('..', __dir__)
+destination = ARGV.fetch(0)
+
+abort "Destination is not empty: #{destination}" if File.exist?(destination) && !Dir.empty?(destination)
+
+FileUtils.mkdir_p(destination)
+FileUtils.cp_r(File.join(project_root, 'lib'), destination)
+FileUtils.mkdir_p(File.join(destination, 'exe'))
+FileUtils.install(File.join(project_root, 'exe/fm'), File.join(destination, 'exe/fm'), mode: 0o755)
+FileUtils.cp(File.join(project_root, 'packaging/Gemfile'), File.join(destination, 'Gemfile'))
+FileUtils.cp(File.join(project_root, 'packaging/Gemfile.lock'), File.join(destination, 'Gemfile.lock'))
