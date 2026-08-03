@@ -3,6 +3,7 @@ PATH
   specs:
     feedmob-cli (0.1.0)
       dry-cli (~> 1.4)
+      fiddle (~> 1.1)
 
 GEM
   remote: https://rubygems.org/
@@ -10,6 +11,7 @@ GEM
     ast (2.4.3)
     drb (2.2.3)
     dry-cli (1.4.1)
+    fiddle (1.1.8)
     json (2.21.2)
     language_server-protocol (3.17.0.6)
     lint_roller (1.1.0)
@@ -59,6 +61,7 @@ CHECKSUMS
   drb (2.2.3) sha256=0b00d6fdb50995fe4a45dea13663493c841112e4068656854646f418fda13373
   dry-cli (1.4.1) sha256=b8015bb76c708aa8705a36faf694973e75eeeffca39b89c8e172dc6f66a7d874
   feedmob-cli (0.1.0)
+  fiddle (1.1.8) sha256=7fa8ee3627271497f3add5503acdbc3f40b32f610fc1cf49634f083ef3f32eee
   json (2.21.2) sha256=1f1d3b7cf2b3ba1a69beca0bb6db13d5438b80bff3cd54cdaaa620b9b07c1c6a
   language_server-protocol (3.17.0.6) sha256=5ef2c0c138f8267e1bc631d3328347d354f96724b0af22f2c79516120443b7f0
   lint_roller (1.1.0) sha256=2c0c845b632a7d172cb849cc90c1bce937a28c5c8ccccb50dfd46a485003cc87

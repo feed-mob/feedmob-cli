@@ -22,6 +22,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   spec.add_dependency 'dry-cli', '~> 1.4'
+  spec.add_dependency 'fiddle', '~> 1.1'
 
   spec.metadata['rubygems_mfa_required'] = 'true'
 end

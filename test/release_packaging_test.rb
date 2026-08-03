@@ -26,8 +26,8 @@ class ReleasePackagingTest < Minitest::Test
       assert File.executable?(File.join(destination, 'exe/fm'))
 
       lockfile = Bundler::LockfileParser.new(File.read(File.join(destination, 'Gemfile.lock')))
-      assert_equal ['dry-cli'], lockfile.dependencies.keys
-      assert_equal ['dry-cli'], lockfile.specs.map(&:name)
+      assert_equal %w[dry-cli fiddle], lockfile.dependencies.keys.sort
+      assert_equal %w[dry-cli fiddle], lockfile.specs.map(&:name).sort
     end
   end
 
