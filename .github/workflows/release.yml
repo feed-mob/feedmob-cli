@@ -1,0 +1,106 @@
+name: Release dry run
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to build (must match FeedMob::CLI::VERSION)
+        required: true
+        type: string
+      publish:
+        description: Reserved for the protected publish workflow; this workflow never publishes.
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate release inputs
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+      - name: Validate requested version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          test "$RELEASE_VERSION" = "$(ruby -Ilib -r feedmob/cli/version -e 'print FeedMob::CLI::VERSION')"
+          ruby -e 'abort "Invalid version" unless ENV.fetch("RELEASE_VERSION").match?(/\A\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?\z/)' 
+      - run: bundle exec rake test
+      - run: bundle exec rubocop --format simple
+      - run: gem build feedmob-cli.gemspec
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macos-arm64
+            runner: macos-15
+          - target: macos-x86_64
+            runner: macos-15-intel
+          - target: linux-arm64
+            runner: ubuntu-22.04-arm
+          - target: linux-x86_64
+            runner: ubuntu-22.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+      - run: uname -s
+      - run: uname -m
+      - name: Fetch and verify Tebako
+        run: script/fetch-tebako-tool --target ${{ matrix.target }} --output "$RUNNER_TEMP/tebako"
+      - name: Press and verify standalone
+        run: script/press-release-artifact --target ${{ matrix.target }} --tebako "$RUNNER_TEMP/tebako" --output "$RUNNER_TEMP/fm"
+      - name: Linux encrypted credential smoke
+        if: startsWith(matrix.target, 'linux-')
+        run: script/smoke-release-auth --artifact "$RUNNER_TEMP/fm"
+      - name: Package native release asset
+        run: script/package-homebrew-artifact --target ${{ matrix.target }} --artifact "$RUNNER_TEMP/fm" --output "$RUNNER_TEMP/release-assets"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: ${{ runner.temp }}/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  assemble:
+    name: Assemble release assets
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: ${{ runner.temp }}/release-input
+          merge-multiple: true
+      - run: script/assemble-homebrew-release --input "$RUNNER_TEMP/release-input" --output "$RUNNER_TEMP/release-output"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: feedmob-cli-${{ inputs.version }}-release-assets
+          path: ${{ runner.temp }}/release-output/*
+          if-no-files-found: error
+          retention-days: 7
+      - name: Publish summary
+        run: |
+          cat "$RUNNER_TEMP/release-output/SHA256SUMS" >> "$GITHUB_STEP_SUMMARY"
+          printf '\n```json\n' >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/release-output/release-assets.json" >> "$GITHUB_STEP_SUMMARY"
+          printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"

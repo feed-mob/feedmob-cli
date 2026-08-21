@@ -1,0 +1,176 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Linux end-to-end smoke for the encrypted-file credential store. Drives a
+# packed fm standalone against a loopback fake Pixel API with a sentinel token
+# and asserts login/status/logout, file permissions, and tamper handling.
+# Never prints the token or any request header.
+
+require 'fileutils'
+require 'json'
+require 'open3'
+require 'optparse'
+require 'rbconfig'
+require 'socket'
+require 'tmpdir'
+
+unless RbConfig::CONFIG.fetch('host_os').match?(/linux/i)
+  abort 'smoke-release-auth only runs on Linux (encrypted-file credential store)'
+end
+
+options = {}
+OptionParser.new do |parser|
+  parser.on('--artifact PATH') { |path| options[:artifact] = File.expand_path(path) }
+end.parse!
+
+artifact = options.fetch(:artifact)
+abort "#{artifact} is not an executable file" unless File.file?(artifact) && File.executable?(artifact)
+
+SENTINEL_TOKEN = 'fmpat_smoke_sentinel_not_a_real_token'
+IDENTITY_BODY = '{"user":{"email":"smoke@example.invalid"}}'
+
+requests = []
+requests_mutex = Mutex.new
+server = TCPServer.new('127.0.0.1', 0)
+port = server.addr[1]
+
+record_request = lambda do |method, path, authorized|
+  requests_mutex.synchronize { requests << { method:, path:, authorized: } }
+end
+
+respond = lambda do |method, path, authorized|
+  record_request.call(method, path, authorized)
+  unless authorized
+    body = '{"error":"unauthorized"}'
+    next "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nConnection: close\r\n" \
+         "Content-Length: #{body.bytesize}\r\n\r\n#{body}"
+  end
+
+  case [method, path]
+  when ['GET', '/api/v1/cli/me']
+    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n" \
+    "Content-Length: #{IDENTITY_BODY.bytesize}\r\n\r\n#{IDENTITY_BODY}"
+  when ['DELETE', '/api/v1/cli/token']
+    "HTTP/1.1 204 No Content\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+  else
+    body = '{"error":"not_found"}'
+    "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nConnection: close\r\n" \
+      "Content-Length: #{body.bytesize}\r\n\r\n#{body}"
+  end
+end
+
+server_thread = Thread.new do
+  loop do
+    socket = server.accept
+    begin
+      request_line = socket.gets.to_s
+      method, path = request_line.split(' ', 3).first(2)
+      authorization = nil
+      while (line = socket.gets) && line != "\r\n"
+        key, value = line.split(': ', 2)
+        authorization = value.to_s.strip if key.to_s.downcase == 'authorization'
+      end
+      socket.write respond.call(method, path, authorization == "Bearer #{SENTINEL_TOKEN}")
+    ensure
+      socket.close
+    end
+  end
+end
+
+captured_output = +''
+failures = []
+
+check = lambda do |description, condition|
+  if condition
+    puts "ok: #{description}"
+  else
+    failures << description
+    puts "FAIL: #{description}"
+  end
+end
+
+run_fm = lambda do |home, *args, stdin_data: nil|
+  env = {
+    'HOME' => home,
+    'XDG_CONFIG_HOME' => File.join(home, 'xdg'),
+    'FEEDMOB_ALLOW_INSECURE_HTTP' => '1',
+    'FEEDMOB_PIXEL_BASE_URL' => "http://127.0.0.1:#{port}",
+    'PATH' => '/usr/bin:/bin'
+  }
+  stdout, stderr, status = Open3.capture3(env, artifact, '--json', *args, stdin_data: stdin_data.to_s,
+                                                                          unsetenv_others: true)
+  captured_output << stdout << stderr
+  [stdout, stderr, status]
+end
+
+parse_json = lambda do |stdout|
+  JSON.parse(stdout)
+rescue JSON::ParserError
+  nil
+end
+
+mode_of = ->(path) { File.stat(path).mode & 0o777 }
+
+Dir.mktmpdir('feedmob-cli-smoke-auth') do |home|
+  config_dir = File.join(home, 'xdg', 'feedmob-cli')
+  credentials_path = File.join(config_dir, 'credentials.enc')
+  key_path = File.join(config_dir, '.encryption_key')
+  lock_path = File.join(config_dir, '.credentials.lock')
+
+  stdout, _stderr, status = run_fm.call(home, 'pixel', 'auth', 'login', '--token-stdin',
+                                        stdin_data: "#{SENTINEL_TOKEN}\n")
+  login = parse_json.call(stdout)
+  check.call('login succeeds', status.success? && login&.fetch('ok') == true)
+  check.call('login stores the credential in the encrypted file',
+             login&.dig('data', 'source') == 'encrypted_file')
+
+  stdout, _stderr, status = run_fm.call(home, 'pixel', 'auth', 'status')
+  auth_status = parse_json.call(stdout)
+  check.call('status reads the encrypted file credential',
+             status.success? && auth_status&.dig('data', 'source') == 'encrypted_file')
+
+  check.call('config directory is 0700', File.directory?(config_dir) && mode_of.call(config_dir) == 0o700)
+  check.call('credentials file is 0600', File.file?(credentials_path) && mode_of.call(credentials_path) == 0o600)
+  check.call('encryption key is 0600', File.file?(key_path) && mode_of.call(key_path) == 0o600)
+  check.call('lock file is 0600', File.file?(lock_path) && mode_of.call(lock_path) == 0o600)
+  check.call('ciphertext does not contain the plaintext token',
+             File.file?(credentials_path) && !File.binread(credentials_path).include?(SENTINEL_TOKEN))
+
+  backup = File.join(home, 'credentials.backup')
+  FileUtils.cp(credentials_path, backup)
+  tampered = File.binread(credentials_path).bytes
+  tampered[-1] ^= 0x01
+  File.binwrite(credentials_path, tampered.pack('C*'))
+  stdout, _stderr, status = run_fm.call(home, 'pixel', 'auth', 'status')
+  tampered_status = parse_json.call(stdout)
+  check.call('tampered ciphertext fails with a stable store error',
+             !status.success? && tampered_status&.dig('error', 'code') == 'credential_store_error')
+  check.call('tampered ciphertext is left untouched',
+             File.binread(credentials_path) == tampered.pack('C*'))
+  FileUtils.mv(backup, credentials_path)
+
+  stdout, _stderr, status = run_fm.call(home, 'pixel', 'auth', 'logout')
+  logout = parse_json.call(stdout)
+  check.call('logout removes the local credential and revokes remotely',
+             status.success? && logout&.dig('data', 'local_removed') == true &&
+               logout&.dig('data', 'remote_revoked') == true)
+
+  stdout, _stderr, status = run_fm.call(home, 'pixel', 'auth', 'status')
+  missing_status = parse_json.call(stdout)
+  check.call('status after logout reports credential_missing',
+             !status.success? && missing_status&.dig('error', 'code') == 'credential_missing')
+end
+
+seen = requests_mutex.synchronize { requests.dup }
+check.call('fake API verified the bearer token on every request', !seen.empty? && seen.all? { |r| r[:authorized] })
+check.call('login called GET /api/v1/cli/me', seen.count { |r| r[:method] == 'GET' } >= 2)
+check.call('logout called DELETE /api/v1/cli/token', seen.one? { |r| r[:method] == 'DELETE' })
+check.call('the sentinel token never appears in CLI output', !captured_output.include?(SENTINEL_TOKEN))
+check.call('the sentinel token never appears in failure output', failures.none? { |f| f.include?(SENTINEL_TOKEN) })
+
+server_thread.kill
+server.close
+
+abort "smoke-release-auth failed: #{failures.length} check(s) failed" unless failures.empty?
+
+puts 'smoke-release-auth passed'

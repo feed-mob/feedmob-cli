@@ -2,8 +2,30 @@ tebako:
   release_version: "0.1.0"
   format_version: "0.15.9"
   ruby_version: "4.0.1"
-  assets:
+  targets:
     macos-arm64:
-      sha256: "f4d5ad287a4a1721f111320a8c61febca143332e4788a337750a107f496acbd4"
+      os: macos
+      architecture: arm64
+      archive: fm-darwin-arm64.tar.gz
+      tebako_url: https://github.com/tamatebako/tebako/releases/download/v0.1.0/tebako-0.1.0-macos-arm64
+      tebako_sha256: "f4d5ad287a4a1721f111320a8c61febca143332e4788a337750a107f496acbd4"
     macos-x86_64:
-      sha256: "211b39a3e79a241da0836f7d3caa216512f68bbfe982bec715770078b25c2011"
+      os: macos
+      architecture: x86_64
+      archive: fm-darwin-x86_64.tar.gz
+      tebako_url: https://github.com/tamatebako/tebako/releases/download/v0.1.0/tebako-0.1.0-macos-x86_64
+      tebako_sha256: "211b39a3e79a241da0836f7d3caa216512f68bbfe982bec715770078b25c2011"
+    linux-arm64:
+      os: linux
+      architecture: arm64
+      archive: fm-linux-arm64.tar.gz
+      glibc_max: "2.35"
+      tebako_url: https://github.com/tamatebako/tebako/releases/download/v0.1.0/tebako-0.1.0-linux-gnu-arm64
+      tebako_sha256: "efcedda40608b9456e50289cc3626b957869058996f22aa2f2a6d11c4608ed9b"
+    linux-x86_64:
+      os: linux
+      architecture: x86_64
+      archive: fm-linux-x86_64.tar.gz
+      glibc_max: "2.35"
+      tebako_url: https://github.com/tamatebako/tebako/releases/download/v0.1.0/tebako-0.1.0-linux-gnu-x86_64
+      tebako_sha256: "8f442f52bdd8b0085870a71254955f33d9eb8cd4814f0909483db03546937412"

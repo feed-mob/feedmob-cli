@@ -21,3 +21,30 @@ jobs:
       - run: bundle exec rake test
       - run: bundle exec rubocop --format simple
       - run: gem build feedmob-cli.gemspec
+
+  release-tests:
+    name: Release tests (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macos-arm64
+            runner: macos-15
+          - target: macos-x86_64
+            runner: macos-15-intel
+          - target: linux-arm64
+            runner: ubuntu-22.04-arm
+          - target: linux-x86_64
+            runner: ubuntu-22.04
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+      - run: uname -s
+      - run: uname -m
+      - run: bundle exec ruby -Itest test/release_packaging_test.rb
+      - run: bundle exec ruby -Itest test/release_macos_test.rb
+      - run: bundle exec ruby -Itest test/release_linux_test.rb
