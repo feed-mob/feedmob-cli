@@ -5,21 +5,23 @@ require 'fileutils'
 require 'optparse'
 require 'rbconfig'
 require 'tmpdir'
-require 'yaml'
+require_relative 'release_support'
 
 options = { config: File.expand_path('../packaging/release.yml', __dir__) }
 OptionParser.new do |parser|
   parser.on('--config PATH') { |path| options[:config] = File.expand_path(path) }
-  parser.on('--architecture ARCH', %w[arm64 x86_64]) { |architecture| options[:architecture] = architecture }
+  parser.on('--target TARGET', FeedMobRelease::TARGET_IDS) { |target| options[:target] = target }
   parser.on('--tebako PATH') { |path| options[:tebako] = File.expand_path(path) }
   parser.on('--output PATH') { |path| options[:output] = File.expand_path(path) }
 end.parse!
 
-architecture = options.fetch(:architecture)
+target_id = options.fetch(:target)
 tebako = options.fetch(:tebako)
 output = options.fetch(:output)
 config_path = options.fetch(:config)
-config = YAML.safe_load_file(config_path, aliases: false).fetch('tebako')
+config = FeedMobRelease.load_config(config_path)
+target = FeedMobRelease.target!(config, target_id)
+FeedMobRelease.assert_native_target!(target_id, target)
 ruby_version = config.fetch('ruby_version')
 format_version = config.fetch('format_version')
 FileUtils.mkdir_p(File.dirname(output))
@@ -28,7 +30,7 @@ verified = system(
   RbConfig.ruby,
   File.join(__dir__, 'verify-tebako-tool'),
   '--config', config_path,
-  '--architecture', architecture,
+  '--target', target_id,
   tebako
 )
 abort 'Tebako tool verification failed' unless verified
@@ -55,7 +57,7 @@ end
 validated = system(
   RbConfig.ruby,
   File.join(__dir__, 'verify-release-artifact'),
-  '--architecture', architecture,
+  '--target', target_id,
   output
 )
 abort 'Release artifact validation failed' unless validated

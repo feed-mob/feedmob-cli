@@ -7,24 +7,28 @@ require 'json'
 require 'rbconfig'
 require 'tmpdir'
 require_relative '../lib/feedmob/cli/version'
+require_relative 'release_support'
 
 options = {}
 OptionParser.new do |parser|
-  parser.on('--architecture ARCH', %w[arm64 x86_64]) { |architecture| options[:architecture] = architecture }
+  parser.on('--config PATH') { |path| options[:config] = File.expand_path(path) }
+  parser.on('--target TARGET', FeedMobRelease::TARGET_IDS) { |target| options[:target] = target }
 end.parse!
 
-architecture = options.fetch(:architecture)
+config_path = options.fetch(:config, File.expand_path('../packaging/release.yml', __dir__))
+target_id = options.fetch(:target)
+config = FeedMobRelease.load_config(config_path)
+target = FeedMobRelease.target!(config, target_id)
+FeedMobRelease.assert_native_target!(target_id, target)
 artifact = File.expand_path(ARGV.fetch(0))
-architectures_stdout, _architectures_stderr, architectures_status = Open3.capture3('lipo', '-archs', artifact)
-abort "#{artifact} is not a Mach-O executable" unless architectures_status.success?
-
-architectures = architectures_stdout.split
-compatible_architectures = architecture == 'arm64' ? %w[arm64 arm64e] : ['x86_64']
-unless architectures.intersect?(compatible_architectures)
-  abort "#{artifact} does not contain #{architecture} code (found: #{architectures.join(', ')})"
+unless File.file?(artifact) && File.executable?(artifact) && !File.symlink?(artifact)
+  abort "#{artifact} is not a regular executable file"
 end
+FeedMobRelease.validate_binary_format!(artifact, target)
+FeedMobRelease.verify_glibc_requirement!(artifact, target)
+FeedMobRelease.verify_dynamic_dependencies!(artifact) if target.fetch('os') == 'linux'
 
-puts "Top-level architecture: #{architecture}"
+puts "Top-level target: #{target_id}"
 
 Dir.mktmpdir('feedmob-cli-release-extract') do |extracted_root|
   extract_stdout, extract_stderr, extract_status = Open3.capture3(
@@ -35,7 +39,8 @@ Dir.mktmpdir('feedmob-cli-release-extract') do |extracted_root|
   tree_stdout, tree_stderr, tree_status = Open3.capture3(
     RbConfig.ruby,
     File.join(__dir__, 'verify-release-tree'),
-    '--architecture', architecture,
+    '--config', config_path,
+    '--target', target_id,
     extracted_root
   )
   abort tree_stderr unless tree_status.success?

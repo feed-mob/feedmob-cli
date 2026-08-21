@@ -66,7 +66,7 @@ module FeedMob
 
           remote_revoked = !service.revoke_path.nil?
           revoke_remote_token(service, credential.value) if remote_revoked
-          local_removed = credential.source == 'keychain' && runtime.credentials.delete(service)
+          local_removed = local_credential_source?(credential.source) && runtime.credentials.delete(service)
           payload = {
             service: service.name,
             logged_out: local_removed || remote_revoked,
@@ -97,6 +97,10 @@ module FeedMob
           else
             "No local #{service.label} credential was removed."
           end
+        end
+
+        def local_credential_source?(source)
+          %w[keychain encrypted_file].include?(source)
         end
       end
 

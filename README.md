@@ -36,81 +36,76 @@ fm version
 独立 gem home 的启动器。因此安装后的 `fm` 可在任意工作目录运行，不依赖
 本仓库的路径。可通过 `PREFIX=/your/prefix make install-local` 改变安装位置。
 
-这不是 AWS CLI 那样自带 Ruby runtime 的签名 macOS 安装包。面向非开发者的
+这不是 AWS CLI 那样自带 Ruby runtime 的签名安装包。面向非开发者的
 发行方式使用下面独立的 Tebako/Homebrew 流水线，避免把运行时封装与日常命令迭代
 耦合。
 
-## macOS 发行封装
+## macOS/Linux 发行封装
 
 `packaging/release.yml` 固定 Tebako 下载版本和 SHA-256、Tebako runtime line
 以及完整 Ruby 补丁版本。`packaging/Gemfile` 只包含运行时依赖；不要直接对仓库
 根目录执行 `tebako press`，否则会把测试、开发工具和潜在 native extensions
 带入产物。
 
-先从 Tebako 官方 Release 下载与目标架构对应的工具，分别生成 standalone：
+支持的发布目标为 `macos-arm64`、`macos-x86_64`、`linux-arm64` 与
+`linux-x86_64`。正式产物必须在对应 OS/CPU 的原生 runner 上构建和运行验证；
+Rosetta/QEMU 只能作为开发辅助。首个 Linux 支持基线是 Ubuntu 22.04-compatible
+GNU/glibc 系统（`glibc >= 2.35`），不支持 Alpine/musl。
+
+单目标构建会下载已固定 SHA-256 的 Tebako 工具、生成 fat standalone，并在原生
+平台验证顶层和内嵌 Mach-O/ELF 架构、Linux glibc requirement、解包内容和无
+Ruby/Gem 环境下的 version smoke：
 
 ```sh
-script/verify-tebako-tool \
-  --architecture arm64 \
-  /path/to/tebako-macos-arm64
+script/fetch-tebako-tool \
+  --target linux-x86_64 \
+  --output /tmp/tebako
 
 script/press-release-artifact \
-  --architecture arm64 \
-  --tebako /path/to/tebako-macos-arm64 \
-  --output /tmp/fm-arm64
+  --target linux-x86_64 \
+  --tebako /tmp/tebako \
+  --output /tmp/fm
 
-script/press-release-artifact \
-  --architecture x86_64 \
-  --tebako /path/to/tebako-macos-x86_64 \
-  --output /tmp/fm-x86_64
+script/package-homebrew-artifact \
+  --target linux-x86_64 \
+  --artifact /tmp/fm \
+  --output /tmp/release-linux-x86_64
 ```
 
-Intel 构建将 `arm64` 改为 `x86_64` 并使用 x86_64 Tebako 工具。正式产物必须在
-对应架构的原生 runner 上构建；Apple Silicon + Rosetta 仅用于额外冒烟，不能
-替代 Intel 验收。
-
-`press-release-artifact` 会依次完成：
-
-1. 校验 Tebako 工具的 SHA-256 和 Mach-O 架构；
-2. 生成只含 `lib/`、`exe/fm` 与运行时 Gemfile/lock 的临时 root；
-3. 使用固定 Ruby/runtime line 生成 fat standalone；
-4. 解包并检查所有内嵌 Mach-O 架构；
-5. 在无 Ruby/Gem 环境下运行 `fm --json version`。
-
-把两个验证通过的 standalone 封装为 GitHub Release assets：
+每个单目标目录产生一个 archive 和对应 `.sha256`。四个原生 job 完成后，将其
+扁平化到同一个输入目录，再执行：
 
 ```sh
-script/package-homebrew-release \
-  --arm64 /tmp/fm-arm64 \
-  --x86-64 /tmp/fm-x86_64 \
+script/assemble-homebrew-release \
+  --input /tmp/release-input \
   --output /tmp/feedmob-cli-release
 ```
 
-输出固定为 `fm-darwin-arm64.tar.gz`、`fm-darwin-x86_64.tar.gz` 和
-`SHA256SUMS`。每个压缩包只包含一个可执行文件 `fm`。
+输出固定为四个 `fm-{darwin,linux}-{arm64,x86_64}.tar.gz`、`SHA256SUMS` 和
+`release-assets.json`；每个压缩包只包含一个可执行文件 `fm`。
 
-仓库是私有 GitHub 仓库。上传 Release assets 后，先通过 GitHub API 取得两个
-asset ID，再生成放入私有 `homebrew-tap` 仓库 `Formula/fm.rb` 的 Formula：
+仓库和 Tap 都是私有的。上传 Release assets 后，回读四个 GitHub asset ID 并加入
+`release-assets.json`，再生成放入 `feed-mob/homebrew-tap` 的 `Formula/fm.rb`：
 
 ```sh
 script/render-homebrew-formula \
   --version 0.1.0 \
-  --arm64-asset-id ARM_ASSET_ID \
-  --arm64-sha256 ARM_SHA256 \
-  --x86-64-asset-id INTEL_ASSET_ID \
-  --x86-64-sha256 INTEL_SHA256 \
+  --assets-json /tmp/release-assets-with-ids.json \
   --output /path/to/homebrew-tap/Formula/fm.rb
 ```
 
 Formula 使用 GitHub Release Asset API，并从用户环境读取
-`HOMEBREW_GITHUB_API_TOKEN`；Token 不写入 Formula。它按 arm64/Intel 选择对应
-文件并执行 `bin.install "fm"`，Homebrew 负责把命令链接到 PATH。升级或卸载
-Formula 都不会删除 Keychain 凭据；需要彻底清理时，先执行对应服务的
+`HOMEBREW_GITHUB_API_TOKEN`；Token 不写入 Formula。它按 OS/CPU 选择对应文件并
+执行 `bin.install "fm"`，Homebrew 负责把命令链接到 PATH。升级或卸载 Formula 都
+不会删除 Keychain 或 Linux 加密凭据；需要彻底清理时，先执行对应服务的
 `fm ... auth logout`。
 
-当前 standalone 仍未签名，只能用于本地验证。正式发布时应在压缩前对 Tebako
-最终 Mach-O 执行 Developer ID Application/hardened runtime 签名并完成公证；
-本流水线不使用 PKG，也不需要 Developer ID Installer 证书。
+`.github/workflows/release.yml` 目前是手动触发的 dry-run：它只构建、验证并保留
+workflow artifact，绝不创建 GitHub Release 或修改 Tap。Linux 构建还会通过
+`script/smoke-release-auth` 对打包产物执行 encrypted-file 凭据的
+login/status/logout 端到端验证（loopback fake API + sentinel token）。
+正式发布仍需单独配置受保护环境、Developer ID 签名、公证和 Tap PR 工作流；
+本流水线不使用 PKG。
 
 ## 认证
 

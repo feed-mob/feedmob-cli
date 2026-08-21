@@ -1,0 +1,54 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'fileutils'
+require 'optparse'
+require 'rbconfig'
+require_relative 'release_support'
+
+options = { config: File.expand_path('../packaging/release.yml', __dir__) }
+OptionParser.new do |parser|
+  parser.on('--config PATH') { |path| options[:config] = File.expand_path(path) }
+  parser.on('--target TARGET', FeedMobRelease::TARGET_IDS) { |target| options[:target] = target }
+  parser.on('--output PATH') { |path| options[:output] = File.expand_path(path) }
+end.parse!
+
+target_id = options.fetch(:target)
+output = options.fetch(:output)
+config = FeedMobRelease.load_config(options.fetch(:config))
+target = FeedMobRelease.target!(config, target_id)
+FeedMobRelease.assert_native_target!(target_id, target)
+
+if File.exist?(output)
+  existing_sha256 = FeedMobRelease.sha256(output)
+  if existing_sha256 == target.fetch('tebako_sha256')
+    verified = system(RbConfig.ruby, File.join(__dir__, 'verify-tebako-tool'), '--config', options.fetch(:config),
+                      '--target', target_id, output)
+    abort 'Existing Tebako tool verification failed' unless verified
+    puts "Using verified Tebako tool: #{output}"
+    exit 0
+  end
+  abort "Refusing to replace existing non-matching Tebako tool: #{output}"
+end
+
+FileUtils.mkdir_p(File.dirname(output))
+temporary = "#{output}.download-#{Process.pid}"
+begin
+  downloaded = system('curl', '--fail', '--location', '--silent', '--show-error', '--output', temporary,
+                      target.fetch('tebako_url'))
+  abort "Could not download Tebako tool for #{target_id}" unless downloaded
+  FileUtils.chmod(0o755, temporary)
+  actual_sha256 = FeedMobRelease.sha256(temporary)
+  unless actual_sha256 == target.fetch('tebako_sha256')
+    abort "SHA-256 mismatch for downloaded Tebako tool: expected #{target.fetch('tebako_sha256')}, got #{actual_sha256}"
+  end
+  FileUtils.mv(temporary, output)
+ensure
+  FileUtils.rm_f(temporary)
+end
+
+verified = system(RbConfig.ruby, File.join(__dir__, 'verify-tebako-tool'), '--config', options.fetch(:config),
+                  '--target', target_id, output)
+abort 'Downloaded Tebako tool verification failed' unless verified
+
+puts "Fetched verified Tebako tool: #{output}"

@@ -42,8 +42,9 @@ class CliCommandsTest < Minitest::Test
 
     def storage_label = 'macOS Keychain'
 
-    def delete(service)
+    def delete(service) # rubocop:disable Naming/PredicateMethod
       @deleted << service.name
+      true
     end
   end
 
@@ -164,6 +165,20 @@ class CliCommandsTest < Minitest::Test
     assert_equal ['time-off'], credentials.deleted
     assert_empty time_off_client.requests
     assert_equal false, JSON.parse(stdout).dig('data', 'remote_revoked')
+  end
+
+  def test_time_off_logout_deletes_an_encrypted_file_credential
+    credentials = FakeCredentials.new(
+      credential: FeedMob::CLI::Credential.new(value: 'fmtopat_saved', source: 'encrypted_file')
+    )
+    time_off_client = FakeClient.new
+    use_runtime(credentials:, clients: { 'pixel' => FakeClient.new, 'time-off' => time_off_client })
+
+    stdout, = run_cli('time-off', 'auth', 'logout', '--json')
+
+    assert_equal ['time-off'], credentials.deleted
+    assert_empty time_off_client.requests
+    assert_equal true, JSON.parse(stdout).dig('data', 'local_removed')
   end
 
   def test_environment_credential_logout_names_the_variable_to_unset

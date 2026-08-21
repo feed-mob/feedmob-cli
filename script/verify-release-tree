@@ -2,30 +2,36 @@
 # frozen_string_literal: true
 
 require 'find'
-require 'open3'
 require 'optparse'
+require_relative 'release_support'
 
 options = {}
 OptionParser.new do |parser|
-  parser.on('--architecture ARCH', %w[arm64 x86_64]) { |architecture| options[:architecture] = architecture }
+  parser.on('--config PATH') { |path| options[:config] = File.expand_path(path) }
+  parser.on('--target TARGET', FeedMobRelease::TARGET_IDS) { |target| options[:target] = target }
 end.parse!
 
-architecture = options.fetch(:architecture)
+config_path = options.fetch(:config, File.expand_path('../packaging/release.yml', __dir__))
+target_id = options.fetch(:target)
+config = FeedMobRelease.load_config(config_path)
+target = FeedMobRelease.target!(config, target_id)
+FeedMobRelease.assert_native_target!(target_id, target)
 root = File.expand_path(ARGV.fetch(0))
-compatible_architectures = architecture == 'arm64' ? %w[arm64 arm64e] : ['x86_64']
-mach_o_count = 0
+native_count = 0
 
 Find.find(root) do |path|
   next unless File.file?(path)
 
-  architectures_stdout, _architectures_stderr, architectures_status = Open3.capture3('lipo', '-archs', path)
-  next unless architectures_status.success?
+  if target.fetch('os') == 'macos'
+    next unless FeedMobRelease.macho_architectures(path)
+  else
+    next unless FeedMobRelease.elf?(path)
+  end
 
-  mach_o_count += 1
-  architectures = architectures_stdout.split
-  next if architectures.intersect?(compatible_architectures)
-
-  abort "#{path} does not contain #{architecture} code (found: #{architectures.join(', ')})"
+  native_count += 1
+  FeedMobRelease.validate_binary_format!(path, target)
+  FeedMobRelease.verify_glibc_requirement!(path, target)
 end
 
-puts "Embedded Mach-O files: #{mach_o_count}"
+format = target.fetch('os') == 'macos' ? 'Mach-O' : 'ELF'
+puts "Embedded #{format} files: #{native_count}"

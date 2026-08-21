@@ -1,0 +1,93 @@
+# frozen_string_literal: true
+
+require 'digest'
+require 'fileutils'
+require 'json'
+require 'open3'
+require 'rbconfig'
+require 'tmpdir'
+require 'yaml'
+
+module ReleaseTestHelpers
+  PROJECT_ROOT = File.expand_path('..', __dir__)
+  TARGET_IDS = %w[macos-arm64 macos-x86_64 linux-arm64 linux-x86_64].freeze
+
+  def valid_release_config
+    targets = TARGET_IDS.to_h do |id|
+      os, architecture = id.split('-', 2)
+      target = {
+        'os' => os,
+        'architecture' => architecture,
+        'archive' => "fm-#{os == 'macos' ? 'darwin' : 'linux'}-#{architecture}.tar.gz",
+        'tebako_url' => "https://example.com/tebako-#{id}",
+        'tebako_sha256' => format('%02x', TARGET_IDS.index(id)) * 32
+      }
+      target['glibc_max'] = '2.35' if os == 'linux'
+      [id, target]
+    end
+    config = {
+      'tebako' => {
+        'release_version' => '0.1.0',
+        'format_version' => '0.15.9',
+        'ruby_version' => '4.0.1',
+        'targets' => targets
+      }
+    }
+    yield config if block_given?
+    config
+  end
+
+  def with_config_file(config)
+    Dir.mktmpdir('feedmob-cli-release-config') do |directory|
+      path = File.join(directory, 'release.yml')
+      File.write(path, YAML.dump(config))
+      yield path
+    end
+  end
+
+  def host_os
+    RUBY_PLATFORM.include?('darwin') ? 'macos' : 'linux'
+  end
+
+  def host_architecture
+    machine = RbConfig::CONFIG.fetch('host_cpu').downcase
+    return 'arm64' if %w[arm64 aarch64].include?(machine)
+
+    'x86_64'
+  end
+
+  def host_target_id
+    "#{host_os}-#{host_architecture}"
+  end
+
+  def run_script(name, *)
+    Open3.capture3(RbConfig.ruby, File.join(PROJECT_ROOT, 'script', name), *, chdir: PROJECT_ROOT)
+  end
+
+  def run_release_support(code, *)
+    Open3.capture3(RbConfig.ruby, '-r', './script/release_support', '-e', code, *, chdir: PROJECT_ROOT)
+  end
+
+  def compile_fake_artifact(artifact, temporary_directory, extra_flags: [])
+    source = File.join(temporary_directory, 'fake_fm.c')
+    File.write(
+      source,
+      <<~'C'
+        #include <stdio.h>
+        #include <string.h>
+        int main(int argc, char **argv) {
+          if (argc == 3 && strcmp(argv[1], "--tebako-extract") == 0) return 0;
+          if (argc == 3 && strcmp(argv[1], "--json") == 0 && strcmp(argv[2], "version") == 0) {
+            puts("{\"ok\":true,\"data\":{\"version\":\"0.1.0\"}}");
+            return 0;
+          }
+          return 2;
+        }
+      C
+    )
+
+    compiler = host_os == 'macos' ? %w[xcrun clang] : [ENV.fetch('CC', 'cc')]
+    _stdout, stderr, status = Open3.capture3(*compiler, source, '-o', artifact, *extra_flags)
+    assert_predicate status, :success?, stderr
+  end
+end

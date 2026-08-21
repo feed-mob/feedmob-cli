@@ -1,0 +1,67 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'fileutils'
+require 'json'
+require 'open3'
+require 'optparse'
+require 'tmpdir'
+require_relative 'release_support'
+
+options = { config: File.expand_path('../packaging/release.yml', __dir__) }
+OptionParser.new do |parser|
+  parser.on('--config PATH') { |path| options[:config] = File.expand_path(path) }
+  parser.on('--input PATH') { |path| options[:input] = File.expand_path(path) }
+  parser.on('--output PATH') { |path| options[:output] = File.expand_path(path) }
+end.parse!
+
+input = options.fetch(:input)
+output = options.fetch(:output)
+abort "Input directory does not exist: #{input}" unless File.directory?(input)
+if File.exist?(output) && (!File.directory?(output) || !Dir.empty?(output))
+  abort "Output directory is not empty: #{output}"
+end
+
+config = FeedMobRelease.load_config(options.fetch(:config))
+targets = FeedMobRelease::TARGET_IDS.to_h { |id| [id, FeedMobRelease.target!(config, id)] }
+expected_files = targets.values.flat_map do |target|
+  [target.fetch('archive'), "#{target.fetch('archive')}.sha256"]
+end.sort
+actual_files = Dir.children(input).sort
+abort "Unexpected release input files: #{actual_files.join(', ')}" unless actual_files == expected_files
+
+assets = {}
+checksums = []
+targets.each do |id, target|
+  archive_name = target.fetch('archive')
+  archive = File.join(input, archive_name)
+  checksum_file = File.join(input, "#{archive_name}.sha256")
+  actual_checksum = FeedMobRelease.sha256(archive)
+  expected_checksum = "#{actual_checksum}  #{archive_name}"
+  abort "Checksum mismatch for #{archive_name}" unless File.read(checksum_file).strip == expected_checksum
+
+  listing_stdout, listing_stderr, listing_status = Open3.capture3('tar', '-tzf', archive)
+  abort "Could not inspect #{archive_name}: #{listing_stderr}" unless listing_status.success?
+  abort "Unexpected files in #{archive_name}" unless listing_stdout.lines(chomp: true) == ['fm']
+
+  assets[id] = { 'name' => archive_name, 'sha256' => actual_checksum }
+  checksums << expected_checksum
+end
+
+Dir.mktmpdir('feedmob-cli-homebrew-release') do |temporary_directory|
+  targets.each_value do |target|
+    archive_name = target.fetch('archive')
+    FileUtils.cp(File.join(input, archive_name), File.join(temporary_directory, archive_name))
+  end
+  File.write(File.join(temporary_directory, 'SHA256SUMS'), "#{checksums.sort.join("\n")}\n")
+  File.write(
+    File.join(temporary_directory, 'release-assets.json'),
+    "#{JSON.pretty_generate('version' => config.fetch('release_version'), 'assets' => assets)}\n"
+  )
+  FileUtils.mkdir_p(output)
+  Dir.children(temporary_directory).each do |name|
+    FileUtils.mv(File.join(temporary_directory, name), File.join(output, name))
+  end
+end
+
+puts "Created complete Homebrew release assets: #{output}"

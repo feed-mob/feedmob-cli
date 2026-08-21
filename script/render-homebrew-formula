@@ -2,38 +2,47 @@
 # frozen_string_literal: true
 
 require 'fileutils'
+require 'json'
 require 'optparse'
+
+TARGET_IDS = %w[macos-arm64 macos-x86_64 linux-arm64 linux-x86_64].freeze
 
 options = {}
 OptionParser.new do |parser|
   parser.on('--version VERSION') { |value| options[:version] = value }
-  parser.on('--arm64-asset-id ID') { |value| options[:arm64_asset_id] = value }
-  parser.on('--arm64-sha256 SHA256') { |value| options[:arm64_sha256] = value }
-  parser.on('--x86-64-asset-id ID') { |value| options[:x86_64_asset_id] = value }
-  parser.on('--x86-64-sha256 SHA256') { |value| options[:x86_64_sha256] = value }
+  parser.on('--assets-json PATH') { |path| options[:assets_json] = File.expand_path(path) }
   parser.on('--output PATH') { |path| options[:output] = File.expand_path(path) }
 end.parse!
 
 version = options.fetch(:version)
-arm64_asset_id = options.fetch(:arm64_asset_id)
-arm64_sha256 = options.fetch(:arm64_sha256)
-x86_64_asset_id = options.fetch(:x86_64_asset_id)
-x86_64_sha256 = options.fetch(:x86_64_sha256)
+manifest = JSON.parse(File.read(options.fetch(:assets_json)))
+assets = manifest.fetch('assets')
 output = options.fetch(:output)
 
 abort "Invalid version: #{version}" unless version.match?(/\A\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?\z/)
-{
-  'arm64 asset ID' => arm64_asset_id,
-  'x86_64 asset ID' => x86_64_asset_id
-}.each do |name, value|
-  abort "Invalid #{name}: #{value}" unless value.match?(/\A\d+\z/)
+abort "Asset manifest version does not match #{version}" unless manifest.fetch('version') == version
+abort "Asset manifest targets must be exactly: #{TARGET_IDS.join(', ')}" unless assets.keys.sort == TARGET_IDS.sort
+
+TARGET_IDS.each do |id|
+  asset = assets.fetch(id)
+  abort "Invalid #{id} asset ID" unless asset.fetch('asset_id').to_s.match?(/\A\d+\z/)
+  abort "Invalid #{id} SHA-256" unless asset.fetch('sha256').match?(/\A[0-9a-f]{64}\z/)
+  unless asset.fetch('name').match?(/\Afm-(?:darwin|linux)-(?:arm64|x86_64)\.tar\.gz\z/)
+    abort "Invalid #{id} archive name"
+  end
 end
-{
-  'arm64 SHA-256' => arm64_sha256,
-  'x86_64 SHA-256' => x86_64_sha256
-}.each do |name, value|
-  abort "Invalid #{name}: #{value}" unless value.match?(/\A[0-9a-f]{64}\z/)
+abort 'Asset manifest contains duplicate asset IDs' unless assets.values.map do |asset|
+  asset.fetch('asset_id').to_s
+end.uniq.length == TARGET_IDS.length
+
+def asset_branch(asset)
+  <<~RUBY.chomp
+    url "https://api.github.com/repos/feed-mob/feedmob-cli/releases/assets/#{asset.fetch('asset_id')}", headers: download_headers
+    sha256 "#{asset.fetch('sha256')}"
+  RUBY
 end
+
+branches = TARGET_IDS.to_h { |id| [id, asset_branch(assets.fetch(id)).gsub("\n", "\n        ")] }
 
 formula = <<~RUBY
   class Fm < Formula
@@ -42,20 +51,31 @@ formula = <<~RUBY
     version "#{version}"
     license "MIT"
 
-    github_token = ENV.fetch("HOMEBREW_GITHUB_API_TOKEN")
+    github_token = ENV["HOMEBREW_GITHUB_API_TOKEN"]
+    odie "HOMEBREW_GITHUB_API_TOKEN must grant read access to feed-mob/feedmob-cli releases." if github_token.to_s.empty?
     download_headers = [
       "Accept: application/octet-stream",
       "Authorization: Bearer \#{github_token}",
     ]
 
-    if Hardware::CPU.arm?
-      url "https://api.github.com/repos/feed-mob/feedmob-cli/releases/assets/#{arm64_asset_id}",
-          headers: download_headers
-      sha256 "#{arm64_sha256}"
-    else
-      url "https://api.github.com/repos/feed-mob/feedmob-cli/releases/assets/#{x86_64_asset_id}",
-          headers: download_headers
-      sha256 "#{x86_64_sha256}"
+    on_macos do
+      on_arm do
+        #{branches.fetch('macos-arm64')}
+      end
+
+      on_intel do
+        #{branches.fetch('macos-x86_64')}
+      end
+    end
+
+    on_linux do
+      on_arm do
+        #{branches.fetch('linux-arm64')}
+      end
+
+      on_intel do
+        #{branches.fetch('linux-x86_64')}
+      end
     end
 
     def install
@@ -69,5 +89,7 @@ formula = <<~RUBY
 RUBY
 
 FileUtils.mkdir_p(File.dirname(output))
-File.write(output, formula)
+temporary = "#{output}.tmp-#{Process.pid}"
+File.write(temporary, formula)
+FileUtils.mv(temporary, output)
 puts "Rendered private Homebrew Formula: #{output}"
