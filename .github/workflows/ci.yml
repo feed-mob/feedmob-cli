@@ -77,6 +77,9 @@ jobs:
       # Audit needs network access to the private release assets, so it only
       # runs in the release workflow; CI covers syntax and Homebrew style.
       # brew style requires the formula to live in a tap.
+      - name: Set up Homebrew on Linux
+        if: runner.os == 'Linux'
+        run: echo "/home/linuxbrew/.linuxbrew/bin" >> "$GITHUB_PATH"
       - name: Homebrew style
         run: |
           brew tap-new feed-mob/formula-check
