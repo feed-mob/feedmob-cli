@@ -6,7 +6,7 @@ module FeedMob
   module CLI
     module Commands
       class AuthLogin < Base
-        desc 'Verify and save a service credential in macOS Keychain'
+        desc 'Verify and securely save a service credential'
         option :token_stdin, type: :boolean, default: false, desc: 'Read the token from standard input'
 
         def call(token_stdin: false, **)
@@ -14,15 +14,16 @@ module FeedMob
           runtime.credentials.validate_token!(service, token)
           response = runtime.client(service).request(method: :get, path: service.identity_path, token:)
           runtime.credentials.store(service, token)
+          source = runtime.credentials.storage_source
 
           output.success(
             {
               service: service.name,
               authenticated: true,
-              source: 'keychain',
+              source:,
               identity: response.data
             },
-            message: "Authenticated with #{service.label}; credential saved in macOS Keychain."
+            message: "Authenticated with #{service.label}; credential saved in #{runtime.credentials.storage_label}."
           )
         end
       end
@@ -100,7 +101,7 @@ module FeedMob
       end
 
       class PixelAuthLogin < AuthLogin
-        desc 'Verify and save a Pixel credential in macOS Keychain'
+        desc 'Verify and securely save a Pixel credential'
 
         def service_name = 'pixel'
       end
@@ -118,7 +119,7 @@ module FeedMob
       end
 
       class TimeOffAuthLogin < AuthLogin
-        desc 'Verify and save a Time Off credential in macOS Keychain'
+        desc 'Verify and securely save a Time Off credential'
 
         def service_name = 'time-off'
       end
