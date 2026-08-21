@@ -48,3 +48,38 @@ jobs:
       - run: bundle exec ruby -Itest test/release_packaging_test.rb
       - run: bundle exec ruby -Itest test/release_macos_test.rb
       - run: bundle exec ruby -Itest test/release_linux_test.rb
+
+  formula:
+    name: Formula checks (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+      - name: Render fixture formula
+        run: |
+          ruby -rjson -e '
+            targets = %w[macos-arm64 macos-x86_64 linux-arm64 linux-x86_64]
+            names = %w[fm-darwin-arm64.tar.gz fm-darwin-x86_64.tar.gz fm-linux-arm64.tar.gz fm-linux-x86_64.tar.gz]
+            assets = targets.each_with_index.to_h do |id, index|
+              [id, { "name" => names.fetch(index), "asset_id" => (index + 1).to_s, "sha256" => ((97 + index).chr * 64) }]
+            end
+            File.write("formula-manifest.json", JSON.generate({ "version" => "0.1.0", "assets" => assets }))
+          '
+          script/render-homebrew-formula --version 0.1.0 --assets-json formula-manifest.json --output "$RUNNER_TEMP/fm.rb"
+      - run: ruby -c "$RUNNER_TEMP/fm.rb"
+      # Audit needs network access to the private release assets, so it only
+      # runs in the release workflow; CI covers syntax and Homebrew style.
+      # brew style requires the formula to live in a tap.
+      - name: Homebrew style
+        run: |
+          brew tap-new feed-mob/formula-check
+          cp "$RUNNER_TEMP/fm.rb" "$(brew --repository feed-mob/formula-check)/Formula/fm.rb"
+          brew style feed-mob/formula-check/fm
+          brew untap feed-mob/formula-check
