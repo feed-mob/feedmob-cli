@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
-require 'open3'
 require 'fiddle/import'
+require 'open3'
+require_relative 'encrypted_store'
 require_relative 'error'
 
 module FeedMob
@@ -9,27 +10,30 @@ module FeedMob
     class Keychain
       Result = Data.define(:stdout, :stderr, :success?)
 
-      def initialize(platform: RUBY_PLATFORM, runner: CommandRunner.new, native_writer: nil)
+      def initialize(platform: RUBY_PLATFORM, runner: CommandRunner.new, native_reader: nil, native_writer: nil,
+                     fallback_store: nil)
         @platform = platform
         @runner = runner
+        @native_reader = native_reader
         @native_writer = native_writer
+        @fallback_store = fallback_store || EncryptedStore.new(platform:)
       end
 
       def read(service)
-        return nil unless macos?
+        return @fallback_store.read(service) unless macos?
 
-        result = @runner.call(
-          ['/usr/bin/security', 'find-generic-password', '-a', 'fm', '-s', service.keychain_service, '-w']
-        )
-        return result.stdout.strip if result.success?
-        return nil if result.stderr.include?('could not be found')
+        result = (@native_reader || NativeReader.new).read(account: 'fm', service: service.keychain_service)
+        return result.password if result.status == NativeReader::SUCCESS
+        return nil if result.status == NativeReader::ITEM_NOT_FOUND
 
-        raise Error.new(code: 'keychain_error',
+        error_code = result.status == NativeReader::AUTH_FAILED ? 'keychain_auth_failed' : 'keychain_error'
+        raise Error.new(code: error_code,
                         message: "Could not read the #{service.label} credential from macOS Keychain.")
       end
 
       def write(service, token)
-        ensure_macos!(service)
+        return @fallback_store.write(service, token) unless macos?
+
         written = (@native_writer || NativeWriter.new).write(
           account: 'fm',
           service: service.keychain_service,
@@ -42,7 +46,7 @@ module FeedMob
       end
 
       def delete(service)
-        return false unless macos?
+        return @fallback_store.delete(service) unless macos?
 
         result = @runner.call(
           ['/usr/bin/security', 'delete-generic-password', '-a', 'fm', '-s', service.keychain_service]
@@ -54,19 +58,37 @@ module FeedMob
                         message: "Could not delete the #{service.label} credential from macOS Keychain.")
       end
 
+      def storage_source
+        macos? ? 'keychain' : 'encrypted_file'
+      end
+
+      def storage_label
+        macos? ? 'macOS Keychain' : 'encrypted local credential store'
+      end
+
       private
 
       def macos?
         @platform.include?('darwin')
       end
 
-      def ensure_macos!(service)
-        return if macos?
+      class NativeReader
+        Result = Data.define(:status, :password)
 
-        raise Error.new(
-          code: 'keychain_unavailable',
-          message: "macOS Keychain is unavailable. Set #{service.token_env} instead."
-        )
+        SUCCESS = 0
+        ITEM_NOT_FOUND = -25_300
+        AUTH_FAILED = -25_293
+
+        def initialize(api: nil)
+          @api = api || SecurityFramework.new
+        end
+
+        def read(account:, service:)
+          status, password, item = @api.read_generic_password(account:, service:)
+          Result.new(status:, password:)
+        ensure
+          @api.release(item) if defined?(item) && item
+        end
       end
 
       class NativeWriter
@@ -124,6 +146,33 @@ module FeedMob
           [status, item]
         end
 
+        def read_generic_password(account:, service:)
+          password_address = 0
+          password_length_output = Fiddle::Pointer.malloc(Fiddle::SIZEOF_INT)
+          password_length_output[0, Fiddle::SIZEOF_INT] = [0].pack('I')
+          password_output = Fiddle::Pointer.malloc(Fiddle::SIZEOF_VOIDP)
+          password_output[0, Fiddle::SIZEOF_VOIDP] = [0].pack('J')
+          item_output = Fiddle::Pointer.malloc(Fiddle::SIZEOF_VOIDP)
+          item_output[0, Fiddle::SIZEOF_VOIDP] = [0].pack('J')
+          status = @functions.SecKeychainFindGenericPassword(
+            nil,
+            service.bytesize, service,
+            account.bytesize, account,
+            password_length_output, password_output,
+            item_output
+          )
+          password_address = password_output[0, Fiddle::SIZEOF_VOIDP].unpack1('J')
+          item_address = item_output[0, Fiddle::SIZEOF_VOIDP].unpack1('J')
+          password_length = password_length_output[0, Fiddle::SIZEOF_INT].unpack1('I')
+          password = Fiddle::Pointer.new(password_address)[0, password_length] unless password_address.zero?
+          item = Fiddle::Pointer.new(item_address) unless item_address.zero?
+          [status, password, item]
+        ensure
+          unless password_address.zero?
+            @functions.SecKeychainItemFreeContent(nil, Fiddle::Pointer.new(password_address))
+          end
+        end
+
         def modify_item(item, password:)
           @functions.SecKeychainItemModifyAttributesAndData(item, nil, password.bytesize, password)
         end
@@ -142,6 +191,7 @@ module FeedMob
                      'const char *, unsigned int, const void *, void *)'
               extern 'int SecKeychainFindGenericPassword(void *, unsigned int, const char *, unsigned int, ' \
                      'const char *, void *, void *, void *)'
+              extern 'int SecKeychainItemFreeContent(void *, void *)'
               extern 'int SecKeychainItemModifyAttributesAndData(void *, void *, unsigned int, const void *)'
               extern 'void CFRelease(void *)'
             end

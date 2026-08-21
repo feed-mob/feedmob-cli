@@ -18,7 +18,7 @@ module FeedMob
         return credential(environment_value, 'env', service) unless environment_value.empty?
 
         keychain_value = @keychain.read(service).to_s.strip
-        return credential(keychain_value, 'keychain', service) unless keychain_value.empty?
+        return credential(keychain_value, storage_source, service) unless keychain_value.empty?
 
         Credential.new(value: nil, source: 'missing')
       end
@@ -30,6 +30,14 @@ module FeedMob
 
       def delete(service)
         @keychain.delete(service)
+      end
+
+      def storage_source
+        @keychain.respond_to?(:storage_source) ? @keychain.storage_source : 'keychain'
+      end
+
+      def storage_label
+        @keychain.respond_to?(:storage_label) ? @keychain.storage_label : 'macOS Keychain'
       end
 
       def validate_token!(service, token)

@@ -38,6 +38,10 @@ class CliCommandsTest < Minitest::Test
 
     def validate_token!(_service, _token); end
 
+    def storage_source = 'keychain'
+
+    def storage_label = 'macOS Keychain'
+
     def delete(service)
       @deleted << service.name
     end

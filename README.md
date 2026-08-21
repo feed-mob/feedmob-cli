@@ -117,16 +117,18 @@ Formula 都不会删除 Keychain 凭据；需要彻底清理时，先执行对�
 每个服务独立保存凭据，优先级如下：
 
 1. 对应的环境变量；
-2. macOS Keychain；
+2. macOS 上的 Keychain，或其他平台上的加密本地凭据存储；
 3. 未配置。
 
 | 服务 | Token 环境变量 | 默认地址 | 身份接口 | 注销行为 |
 | --- | --- | --- | --- | --- |
-| Pixel | `FEEDMOB_PIXEL_TOKEN` | `https://feedmob-pixel-dashboard.feedmob.com/rails` | `GET /api/v1/cli/me` | 远端撤销，并删除本地 Keychain 项 |
-| Time Off | `FEEDMOB_TIME_OFF_TOKEN` | `https://time-off.feedmob.com` | `GET /api/v1/me` | 仅删除本地 Keychain 项 |
+| Pixel | `FEEDMOB_PIXEL_TOKEN` | `https://feedmob-pixel-dashboard.feedmob.com/rails` | `GET /api/v1/cli/me` | 远端撤销，并删除本地安全存储 |
+| Time Off | `FEEDMOB_TIME_OFF_TOKEN` | `https://time-off.feedmob.com` | `GET /api/v1/me` | 仅删除本地安全存储 |
 
-可通过 `FEEDMOB_PIXEL_BASE_URL` 和 `FEEDMOB_TIME_OFF_BASE_URL` 覆盖服务地址，
-方便本地或测试环境使用。
+可通过 `FEEDMOB_PIXEL_BASE_URL` 和 `FEEDMOB_TIME_OFF_BASE_URL` 覆盖服务地址。
+覆盖地址必须使用 HTTPS，避免将 Bearer Token 明文发送到网络。仅本机回环地址
+（`localhost`、`127.0.0.1` 或 `::1`）可在显式设置
+`FEEDMOB_ALLOW_INSECURE_HTTP=1` 后使用 HTTP；不要在共享、测试或生产环境设置该变量。
 
 ```sh
 # 默认隐藏输入；Token 不会作为命令行参数出现
@@ -136,6 +138,11 @@ fm pixel auth status
 # 仅在自动化中明确从标准输入读取
 printf '%s' "$FEEDMOB_PIXEL_TOKEN" | fm pixel auth login --token-stdin
 
+# 仅本机开发：显式允许 loopback HTTP
+FEEDMOB_ALLOW_INSECURE_HTTP=1 \
+  FEEDMOB_PIXEL_BASE_URL=http://127.0.0.1:3000/rails \
+  fm pixel auth status
+
 # Time Off 使用自己独立的 Token 与 API
 fm time-off auth login
 fm time-off auth status
@@ -143,7 +150,7 @@ fm time-off auth status
 
 `fm pixel auth logout` 会调用 Pixel 的 `DELETE /api/v1/cli/token` 撤销正在使用的
 Token。Time Off 现有 API 没有 bearer-authenticated 的撤销端点，因此
-`fm time-off auth logout` 只移除本地 Keychain 值。若当前凭据来自环境变量，CLI
+`fm time-off auth logout` 只移除本地安全存储中的值。若当前凭据来自环境变量，CLI
 无法修改父 shell；命令会指出需要 `unset` 的变量名称。
 
 ## 自动化与诊断
@@ -178,7 +185,10 @@ fm pixel request get /api/v1/cli/me --json
 ## 安全边界
 
 - CLI 不提供 `--token`，避免 Token 进入 shell history 或进程参数；
-- Keychain 写入通过 `/usr/bin/security` 的 stdin 完成，不把 Token 放进 argv；
+- macOS 直接经 Security.framework 读写 Keychain，Token 不经过子进程的 argv 或 stdout；
+- 非 macOS 使用 AES-256-GCM 加密本地凭据；Unix 上目录为 `0700`、密钥/密文/锁文件为
+  `0600`，并使用文件锁和原子替换。它是系统 Keychain 不可用时的后备，不应用于共享用户帐户；
 - 日志、JSON 输出和错误信息不包含完整 Token；
-- 请求仅使用 configured service host 与 bearer token；
+- 请求仅使用 configured service host、HTTPS 与 bearer token；仅显式 opt-in 的 loopback HTTP
+  可作为本机开发例外；
 - 当前只提供 GET 原始请求，不提供写入型 API 逃生口。

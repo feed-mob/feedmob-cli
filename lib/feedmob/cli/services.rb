@@ -41,7 +41,7 @@ module FeedMob
         Service.new(
           name: name.to_s,
           label: definition.fetch(:label),
-          base_url: normalize_base_url(configured_url, base_url_env),
+          base_url: normalize_base_url(configured_url, base_url_env, env),
           token_env: definition.fetch(:token_env),
           token_prefix: definition.fetch(:token_prefix),
           identity_path: definition.fetch(:identity_path),
@@ -54,21 +54,47 @@ module FeedMob
         DEFINITIONS.keys.map { |name| fetch(name, env:) }
       end
 
-      def normalize_base_url(value, variable_name)
+      def normalize_base_url(value, variable_name, env)
         normalized = value.to_s.strip.sub(%r{/+\z}, '')
         uri = URI.parse(normalized)
-        valid = uri.is_a?(URI::HTTP) && uri.host && uri.userinfo.nil? && uri.query.nil? && uri.fragment.nil?
-        return normalized if valid
-
-        raise Error.new(
-          code: 'invalid_base_url',
-          message: "#{variable_name} must be an http(s) URL without credentials, query, or fragment."
-        )
+        validate_base_url!(uri, variable_name)
+        validate_base_url_scheme!(uri, variable_name, env)
+        normalized
       rescue URI::InvalidURIError
         raise Error.new(
           code: 'invalid_base_url',
-          message: "#{variable_name} must be an http(s) URL without credentials, query, or fragment."
+          message: base_url_error_message(variable_name, false)
         )
+      end
+
+      def validate_base_url!(uri, variable_name)
+        return if valid_base_url?(uri)
+
+        raise Error.new(code: 'invalid_base_url', message: base_url_error_message(variable_name, false))
+      end
+
+      def valid_base_url?(uri)
+        uri.is_a?(URI::HTTP) && uri.host && uri.userinfo.nil? && uri.query.nil? && uri.fragment.nil?
+      end
+
+      def validate_base_url_scheme!(uri, variable_name, env)
+        return if uri.scheme == 'https' || allowed_insecure_local_url?(uri, env)
+
+        raise Error.new(code: 'insecure_base_url', message: base_url_error_message(variable_name, true))
+      end
+
+      def allowed_insecure_local_url?(uri, env)
+        uri.scheme == 'http' && loopback_host?(uri.host) && env['FEEDMOB_ALLOW_INSECURE_HTTP'] == '1'
+      end
+
+      def loopback_host?(host)
+        %w[localhost 127.0.0.1 ::1].include?(host.delete_prefix('[').delete_suffix(']'))
+      end
+
+      def base_url_error_message(variable_name, valid)
+        return "#{variable_name} must be an http(s) URL without credentials, query, or fragment." unless valid
+
+        "#{variable_name} must use HTTPS. HTTP is only allowed for loopback hosts when FEEDMOB_ALLOW_INSECURE_HTTP=1."
       end
     end
   end
