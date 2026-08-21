@@ -119,7 +119,7 @@ module FeedMobRelease # rubocop:disable Metrics/ModuleLength
   end
 
   def version_at_most?(actual, maximum)
-    actual <= maximum.split('.').map(&:to_i)
+    (actual <=> maximum.split('.').map(&:to_i)) <= 0
   end
 
   def verify_glibc_requirement!(path, target)
