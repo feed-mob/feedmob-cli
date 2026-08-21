@@ -81,12 +81,9 @@ jobs:
         if: runner.os == 'Linux'
         run: echo "/home/linuxbrew/.linuxbrew/bin" >> "$GITHUB_PATH"
       - name: Homebrew style
-        env:
-          GIT_AUTHOR_NAME: feedmob-ci
-          GIT_AUTHOR_EMAIL: ci@feedmob.invalid
-          GIT_COMMITTER_NAME: feedmob-ci
-          GIT_COMMITTER_EMAIL: ci@feedmob.invalid
         run: |
+          git config --global user.name feedmob-ci
+          git config --global user.email ci@feedmob.invalid
           brew tap-new feed-mob/formula-check
           cp "$RUNNER_TEMP/fm.rb" "$(brew --repository feed-mob/formula-check)/Formula/fm.rb"
           brew style feed-mob/formula-check/fm
