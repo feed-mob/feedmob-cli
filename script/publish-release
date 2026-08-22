@@ -53,7 +53,12 @@ gh!(
 )
 puts "Created draft release #{tag}"
 
-release = JSON.parse(gh!('api', "repos/#{REPO}/releases/tags/#{tag}"))
+# releases/tags/<tag> 404s for drafts (no git tag exists until publish), so
+# find the just-created draft through the list endpoint instead.
+releases = JSON.parse(gh!('api', "repos/#{REPO}/releases?per_page=100"))
+release = releases.find { |candidate| candidate.fetch('tag_name') == tag && candidate.fetch('draft') }
+abort "Draft release #{tag} not found after creation" unless release
+
 remote_assets = JSON.parse(gh!('api', "repos/#{REPO}/releases/#{release.fetch('id')}/assets?per_page=100"))
 by_name = remote_assets.to_h { |asset| [asset.fetch('name'), asset] }
 
