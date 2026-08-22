@@ -61,24 +61,32 @@ script/render-homebrew-formula --version 0.1.0 \
 
 ## Workflow
 
-`.github/workflows/release.yml` is manual (`workflow_dispatch`):
+`.github/workflows/release.yml` is manual (`workflow_dispatch`). There is no
+version input: the next version is computed from the latest release tag plus
+the `bump` input (`patch`/`minor`/`major`, default `patch`).
 
 - `publish=false` (default) is a dry run: build, verify, keep workflow
   artifacts. Linux builds additionally run `script/smoke-release-auth`, an
   end-to-end encrypted-file credential login/status/logout check against a
   loopback fake API with a sentinel token.
-- `publish=true` performs the release. Write jobs declare
-  `environment: release` (deployment restricted to `main`) and require the
-  `confirm` input to be exactly `release`; the validate job also enforces
-  default-branch ancestry and that the version was not released before.
+- `publish=true` performs the release. The validate job enforces
+  default-branch ancestry, that the computed version was not released before,
+  and that the `confirm` input is exactly `release`; the write jobs declare
+  `environment: release` (deployment restricted to `main`).
 
 Publish sequence:
 
-1. The `publish` job runs `script/publish-release`: create a draft Release,
-   upload the four archives plus `SHA256SUMS`, read every asset back via the
-   API (name/size/digest), then undraft. Any failure leaves a draft; a
-   published release is never overwritten.
-2. The `formula-pr` job renders `Formula/fm.rb` from the assembled manifest,
+1. The `bump` job commits the `version.rb` bump to `main` as the release bot
+   and every later job builds from that commit, so `fm version` reports the
+   released version. A failed run leaves no tag behind, so re-running computes
+   the same version again.
+2. The `publish` job runs `script/publish-release`: create a draft Release at
+   the bump commit, auto-generate "What's Changed" notes from merged PRs since
+   the previous tag (checksums appended), upload the four archives plus
+   `SHA256SUMS`, read every asset back via the API (name/size/digest), then
+   undraft. Any failure leaves a draft; a published release is never
+   overwritten.
+3. The `formula-pr` job renders `Formula/fm.rb` from the assembled manifest,
    runs `brew style` and `brew audit --online`, and opens a
    `release/fm-<version>` PR in this repo. A human reviews and merges it —
    the workflow never merges Formula PRs.
@@ -89,5 +97,5 @@ needed is the `release` environment restricted to the `main` branch.
 To publish:
 
 ```sh
-gh workflow run release.yml --ref main -f version=<X.Y.Z> -f publish=true -f confirm=release
+gh workflow run release.yml --ref main -f bump=patch -f publish=true -f confirm=release
 ```
