@@ -27,8 +27,8 @@ module ReleaseTestHelpers
     end
     config = {
       'tebako' => {
-        'release_version' => '0.1.0',
-        'format_version' => '0.15.9',
+        'release_version' => '0.1.9',
+        'format_version' => '0.16.4',
         'ruby_version' => '4.0.1',
         'targets' => targets
       }
@@ -76,7 +76,6 @@ module ReleaseTestHelpers
         #include <stdio.h>
         #include <string.h>
         int main(int argc, char **argv) {
-          if (argc == 3 && strcmp(argv[1], "--tebako-extract") == 0) return 0;
           if (argc == 3 && strcmp(argv[1], "--json") == 0 && strcmp(argv[2], "version") == 0) {
             puts("{\"ok\":true,\"data\":{\"version\":\"0.1.0\"}}");
             return 0;
@@ -89,5 +88,19 @@ module ReleaseTestHelpers
     compiler = host_os == 'macos' ? %w[xcrun clang] : [ENV.fetch('CC', 'cc')]
     _stdout, stderr, status = Open3.capture3(*compiler, source, '-o', artifact, *extra_flags)
     assert_predicate status, :success?, stderr
+  end
+
+  FAKE_INSPECT_OUTPUT = <<~OUT.freeze
+    package: fake-fm (tpkg v1, lean, launcher_abi 1)
+      runtime_ref: ruby@4.0.1;tebako=0.16.4;image;sha256=#{'0' * 64} (resolution hint; lean)
+  OUT
+
+  def write_fake_tebako_tool(temporary_directory, inspect_output: FAKE_INSPECT_OUTPUT)
+    output_path = File.join(temporary_directory, 'inspect-output.txt')
+    File.write(output_path, inspect_output)
+    tool = File.join(temporary_directory, 'fake-tebako')
+    File.write(tool, "#!/bin/sh\n[ \"$1\" = inspect ] && cat '#{output_path}'\n")
+    FileUtils.chmod(0o755, tool)
+    tool
   end
 end

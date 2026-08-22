@@ -19,7 +19,7 @@ permissions:
 jobs:
   validate:
     name: Validate release inputs
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,7 +34,10 @@ jobs:
         run: |
           test "$RELEASE_VERSION" = "$(ruby -Ilib -r feedmob/cli/version -e 'print FeedMob::CLI::VERSION')"
           ruby -e 'abort "Invalid version" unless ENV.fetch("RELEASE_VERSION").match?(/\A\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?\z/)'
+      # Publish-only gates: dry runs must be able to build from any branch so
+      # release changes can be verified before merging.
       - name: Verify source commit is on the default branch
+        if: inputs.publish
         env:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
@@ -48,6 +51,7 @@ jobs:
               ;;
           esac
       - name: Verify the version was not released before
+        if: inputs.publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_VERSION: ${{ inputs.version }}
@@ -77,9 +81,9 @@ jobs:
           - target: macos-x86_64
             runner: macos-15-intel
           - target: linux-arm64
-            runner: ubuntu-22.04-arm
+            runner: ubuntu-24.04-arm
           - target: linux-x86_64
-            runner: ubuntu-22.04
+            runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
@@ -98,7 +102,7 @@ jobs:
         if: startsWith(matrix.target, 'linux-')
         run: script/smoke-release-auth --artifact "$RUNNER_TEMP/fm"
       - name: Package native release asset
-        run: script/package-homebrew-artifact --target ${{ matrix.target }} --artifact "$RUNNER_TEMP/fm" --output "$RUNNER_TEMP/release-assets"
+        run: script/package-homebrew-artifact --target ${{ matrix.target }} --artifact "$RUNNER_TEMP/fm" --tebako "$RUNNER_TEMP/tebako" --output "$RUNNER_TEMP/release-assets"
       - name: Build summary
         run: |
           {
@@ -117,7 +121,7 @@ jobs:
   assemble:
     name: Assemble release assets
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1

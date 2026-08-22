@@ -10,16 +10,38 @@ class ReleaseMacosTest < Minitest::Test
     skip 'macOS-only tests' unless host_os == 'macos'
   end
 
-  def test_release_artifact_validator_extracts_and_runs_version_smoke
+  def test_release_artifact_validator_inspects_and_runs_version_smoke
     Dir.mktmpdir('feedmob-cli-fake-tebako') do |temporary_directory|
       artifact = File.join(temporary_directory, 'fake-fm')
       compile_fake_artifact(artifact, temporary_directory)
+      tebako = write_fake_tebako_tool(temporary_directory)
 
-      stdout, stderr, status = run_script('verify-release-artifact', '--target', host_target_id, artifact)
+      stdout, stderr, status = run_script(
+        'verify-release-artifact', '--target', host_target_id, '--tebako', tebako, artifact
+      )
 
       assert_predicate status, :success?, "#{stdout}\n#{stderr}"
       assert_includes stdout, "Top-level target: #{host_target_id}"
+      assert_includes stdout, 'Runtime provenance: ruby@4.0.1;tebako=0.16.4;'
       assert_includes stdout, 'Version smoke: 0.1.0'
+    end
+  end
+
+  def test_release_artifact_validator_rejects_an_unexpected_runtime_ref
+    Dir.mktmpdir('feedmob-cli-fake-tebako') do |temporary_directory|
+      artifact = File.join(temporary_directory, 'fake-fm')
+      compile_fake_artifact(artifact, temporary_directory)
+      tebako = write_fake_tebako_tool(
+        temporary_directory,
+        inspect_output: "  runtime_ref: ruby@3.3.7;tebako=0.15.9;sha256=#{'f' * 64}\n"
+      )
+
+      _stdout, stderr, status = run_script(
+        'verify-release-artifact', '--target', host_target_id, '--tebako', tebako, artifact
+      )
+
+      refute_predicate status, :success?
+      assert_includes stderr, 'unexpected runtime_ref'
     end
   end
 
@@ -28,11 +50,13 @@ class ReleaseMacosTest < Minitest::Test
       artifact = File.join(temporary_directory, 'fake-fm')
       output = File.join(temporary_directory, 'output')
       compile_fake_artifact(artifact, temporary_directory)
+      tebako = write_fake_tebako_tool(temporary_directory)
 
       stdout, stderr, status = run_script(
         'package-homebrew-artifact',
         '--target', host_target_id,
         '--artifact', artifact,
+        '--tebako', tebako,
         '--output', output
       )
 

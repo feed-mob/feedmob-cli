@@ -6,6 +6,7 @@ require 'json'
 require 'open3'
 require 'optparse'
 require 'tmpdir'
+require_relative '../lib/feedmob/cli/version'
 require_relative 'release_support'
 
 options = { config: File.expand_path('../packaging/release.yml', __dir__) }
@@ -56,7 +57,7 @@ Dir.mktmpdir('feedmob-cli-homebrew-release') do |temporary_directory|
   File.write(File.join(temporary_directory, 'SHA256SUMS'), "#{checksums.sort.join("\n")}\n")
   File.write(
     File.join(temporary_directory, 'release-assets.json'),
-    "#{JSON.pretty_generate('version' => config.fetch('release_version'), 'assets' => assets)}\n"
+    "#{JSON.pretty_generate('version' => FeedMob::CLI::VERSION, 'assets' => assets)}\n"
   )
   FileUtils.mkdir_p(output)
   Dir.children(temporary_directory).each do |name|

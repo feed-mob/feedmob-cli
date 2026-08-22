@@ -93,6 +93,15 @@ uname -m
 
 第一版先声明 Linux GNU/glibc 支持，建议基线为 Ubuntu 22.04 或兼容发行版。实际最低 glibc 版本必须由生成产物的 version requirement 扫描结果决定，不能只根据 runner 名称推断。
 
+**实施记录（2026-08-22）：** 首次 dry-run 实测 Tebako 0.1.0 官方 Linux 工具（arm64 与 x86_64）要求 `GLIBC_2.36/2.38/2.39`，无法在 Ubuntu 22.04（glibc 2.35）上运行。基线因此确定为 Ubuntu 24.04 / `glibc_max = 2.39`，Linux runner 使用 `ubuntu-24.04` 与 `ubuntu-24.04-arm`。
+
+**实施记录（2026-08-22，第二次修订）：** 第二次 dry-run 发现 tebako-runtime 0.15.9 的 Linux 版本 `--tebako-extract` 损坏（`File.lstat: /__tebako_memfs__`，noble 上两个架构均可复现；macOS 正常），press 流程无法继续。迁移到 Tebako 工具 v0.1.9 + runtime 0.16.4（image-era）后 Linux press 与完整凭据 smoke 全部通过；实测工具与产物均只需 `GLIBC_2.30`，基线回落为 Ubuntu 22.04 / `glibc_max = 2.35`（留有余量）。
+
+image-era 格式带来两个计划级偏差，已经与所有者确认接受：
+
+1. **首次运行下载 runtime image。** 0.16.x runtime 把解释器与 runtime 文件（`.tfs` image）拆成两个工件；当前所有已发布 Tebako 工具（含 v0.2.0）的 fat 模式只内嵌解释器，`.tfs`（约 11 MB）在首次运行时从 tamatebako 官方 Release 下载，经 SHA-256 校验后缓存于 `~/.tebako/runtimes/` 并机器级共享。完全内嵌 image 的 fat 包在上游路线图中（30c CAS），尚未发布。因此 §3.1 的「fat standalone、无任何运行时下载」期望放宽为「首次运行需要访问 github.com（或 `TEBAKO_RUNTIME_MIRROR` 指向的镜像）一次」。
+2. **`--tebako-extract` 不复存在。** 新格式没有解包接口，`verify-release-tree` 随之删除；产物验证改为 `tebako inspect` 断言 `runtime_ref` 与固定的 Ruby/Tebako 版本一致（tree 边界仍由 `prepare-release-root` 在 staging 侧保证，runtime image 本身是官方按目标下载的工件）。
+
 门禁规则：
 
 - 顶层文件必须以 ELF magic 开头。

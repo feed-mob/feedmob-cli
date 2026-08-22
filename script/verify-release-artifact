@@ -13,10 +13,12 @@ options = {}
 OptionParser.new do |parser|
   parser.on('--config PATH') { |path| options[:config] = File.expand_path(path) }
   parser.on('--target TARGET', FeedMobRelease::TARGET_IDS) { |target| options[:target] = target }
+  parser.on('--tebako PATH') { |path| options[:tebako] = File.expand_path(path) }
 end.parse!
 
 config_path = options.fetch(:config, File.expand_path('../packaging/release.yml', __dir__))
 target_id = options.fetch(:target)
+tebako = options.fetch(:tebako)
 config = FeedMobRelease.load_config(config_path)
 target = FeedMobRelease.target!(config, target_id)
 FeedMobRelease.assert_native_target!(target_id, target)
@@ -30,23 +32,16 @@ FeedMobRelease.verify_dynamic_dependencies!(artifact) if target.fetch('os') == '
 
 puts "Top-level target: #{target_id}"
 
-Dir.mktmpdir('feedmob-cli-release-extract') do |extracted_root|
-  extract_stdout, extract_stderr, extract_status = Open3.capture3(
-    artifact, '--tebako-extract', extracted_root
-  )
-  abort "Could not extract #{artifact}: #{extract_stderr}#{extract_stdout}" unless extract_status.success?
+inspect_stdout, inspect_stderr, inspect_status = Open3.capture3(tebako, 'inspect', artifact)
+abort "Could not inspect #{artifact}: #{inspect_stderr}#{inspect_stdout}" unless inspect_status.success?
 
-  tree_stdout, tree_stderr, tree_status = Open3.capture3(
-    RbConfig.ruby,
-    File.join(__dir__, 'verify-release-tree'),
-    '--config', config_path,
-    '--target', target_id,
-    extracted_root
-  )
-  abort tree_stderr unless tree_status.success?
-
-  print tree_stdout
+runtime_ref = inspect_stdout[/^\s*runtime_ref:\s*(\S+)/, 1]
+expected_prefix = "ruby@#{config.fetch('ruby_version')};tebako=#{config.fetch('format_version')};"
+unless runtime_ref&.start_with?(expected_prefix)
+  abort "#{artifact} has unexpected runtime_ref: #{runtime_ref || 'none'} (expected #{expected_prefix}...)"
 end
+
+puts "Runtime provenance: #{runtime_ref}"
 
 Dir.mktmpdir('feedmob-cli-release-home') do |temporary_home|
   version_stdout, version_stderr, version_status = Open3.capture3(
