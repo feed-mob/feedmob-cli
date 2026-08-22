@@ -181,54 +181,48 @@ jobs:
       - name: Publish summary
         run: 'echo "- published: https://github.com/feed-mob/feedmob-cli/releases/tag/v${{ inputs.version }}" >> "$GITHUB_STEP_SUMMARY"'
 
-  tap-pr:
-    name: Prepare Homebrew Tap PR
+  formula-pr:
+    name: Prepare Formula PR
     if: inputs.publish
     needs: publish
     runs-on: ubuntu-24.04
     environment: release
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: feedmob-cli
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: .ruby-version
           bundler-cache: true
-      # The PAT needs contents:write + pull_requests:write on
-      # feed-mob/homebrew-tap. Both repos are public, so the formula audit
-      # needs no download credentials.
-      - uses: actions/checkout@v4
-        with:
-          repository: feed-mob/homebrew-tap
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: homebrew-tap
       - uses: actions/download-artifact@v4
         with:
           name: feedmob-cli-${{ inputs.version }}-release-assets
           path: ${{ runner.temp }}/release-output
-      - name: Render Formula into the Tap
-        run: feedmob-cli/script/render-homebrew-formula --version ${{ inputs.version }} --assets-json "$RUNNER_TEMP/release-output/release-assets.json" --output homebrew-tap/Formula/fm.rb
+      - name: Render the Formula
+        run: script/render-homebrew-formula --version ${{ inputs.version }} --assets-json "$RUNNER_TEMP/release-output/release-assets.json" --output Formula/fm.rb
+      # brew style/audit require the formula inside a tap; symlink this repo
+      # as the feed-mob/tap tap. Downloads are public, no token needed.
       - name: Homebrew style and audit
         run: |
           export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
           mkdir -p "$(brew --repository)/Library/Taps/feed-mob"
-          ln -sfn "$GITHUB_WORKSPACE/homebrew-tap" "$(brew --repository)/Library/Taps/feed-mob/homebrew-tap"
+          ln -sfn "$GITHUB_WORKSPACE" "$(brew --repository)/Library/Taps/feed-mob/homebrew-tap"
           brew style feed-mob/tap/fm
           brew audit --online feed-mob/tap/fm
-      - name: Open the Tap PR
+      - name: Open the Formula PR
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd homebrew-tap
           git config user.name feedmob-release
           git config user.email release@feedmob.invalid
-          git switch -c "codex/fm-${{ inputs.version }}"
+          git switch -c "release/fm-${{ inputs.version }}"
           git add Formula/fm.rb
           git commit -m "fm ${{ inputs.version }}"
-          git push -u origin "codex/fm-${{ inputs.version }}"
+          git push -u origin "release/fm-${{ inputs.version }}"
           CHECKSUMS=$(ruby -rjson -e 'JSON.parse(File.read(ARGV[0])).fetch("assets").each_value { |a| puts "#{a.fetch("sha256")}  #{a.fetch("name")}" }' "$RUNNER_TEMP/release-output/release-assets.json")
-          gh pr create --repo feed-mob/homebrew-tap \
+          gh pr create \
             --title "fm ${{ inputs.version }}" \
             --body "Release: https://github.com/feed-mob/feedmob-cli/releases/tag/v${{ inputs.version }}
 
@@ -238,6 +232,6 @@ jobs:
           ${CHECKSUMS}
           \`\`\`
 
-          Manual review required; the release workflow never merges Tap PRs."
-      - name: Tap PR summary
-        run: echo "- Tap PR opened from branch codex/fm-${{ inputs.version }}; review and merge manually" >> "$GITHUB_STEP_SUMMARY"
+          Manual review required; the release workflow never merges Formula PRs."
+      - name: Formula PR summary
+        run: echo "- Formula PR opened from branch release/fm-${{ inputs.version }}; review and merge manually" >> "$GITHUB_STEP_SUMMARY"

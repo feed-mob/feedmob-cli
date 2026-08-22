@@ -91,20 +91,21 @@ script/assemble-homebrew-release \
 输出固定为四个 `fm-{darwin,linux}-{arm64,x86_64}.tar.gz`、`SHA256SUMS` 和
 `release-assets.json`；每个压缩包只包含一个可执行文件 `fm`。
 
-两个仓库都是公开的。上传 Release assets 后，用 assemble 产物的
-`release-assets.json` 生成放入 `feed-mob/homebrew-tap` 的 `Formula/fm.rb`：
+Formula 就在本仓库的 `Formula/fm.rb`，不依赖其他仓库。上传 Release assets
+后，用 assemble 产物的 `release-assets.json` 生成：
 
 ```sh
 script/render-homebrew-formula \
   --version 0.1.0 \
   --assets-json /tmp/release-output/release-assets.json \
-  --output /path/to/homebrew-tap/Formula/fm.rb
+  --output Formula/fm.rb
 ```
 
 Formula 使用公开的 Release 下载 URL，按 OS/CPU 选择对应文件并执行
 `bin.install "fm"`，无需任何 token。用户安装只需：
 
 ```sh
+brew tap feed-mob/tap https://github.com/feed-mob/feedmob-cli.git
 brew install feed-mob/tap/fm
 ```
 
@@ -113,32 +114,29 @@ brew install feed-mob/tap/fm
 
 `.github/workflows/release.yml` 由 `workflow_dispatch` 手动触发。`publish=false`
 （默认）是 dry-run：只构建、验证并保留 workflow artifact，绝不创建 GitHub
-Release 或修改 Tap。Linux 构建还会通过
+Release 或修改 Formula。Linux 构建还会通过
 `script/smoke-release-auth` 对打包产物执行 encrypted-file 凭据的
 login/status/logout 端到端验证（loopback fake API + sentinel token）。
 
 `publish=true` 走完整发布。写操作 job 声明 `environment: release`（已限制为仅
-`main` 分支可部署，secrets 只对该环境的运行可见），发布另要求 `confirm` 输入
-精确为 `release`，配合 validate 中仅 publish 时生效的 default-branch /
-未发布版本检查作为人工门禁：
+`main` 分支可部署），发布另要求 `confirm` 输入精确为 `release`，配合
+validate 中仅 publish 时生效的 default-branch / 未发布版本检查作为人工门禁：
 
 1. `publish` job 用 `script/publish-release` 创建 draft Release、上传四个
    archive 与 `SHA256SUMS`、通过 API 回读每个 asset 的 name/size/digest
    校验后才取消 draft；任何失败只保留 draft，绝不覆盖已发布版本；
-2. `tap-pr` job 用 assemble 产物的 manifest 渲染 Formula，在
-   `feed-mob/homebrew-tap` 跑 `brew style`/`brew audit --online` 后开
-   `codex/fm-<version>` 分支 PR,人工 review 合并，workflow 不自动合并。
+2. `formula-pr` job 用 assemble 产物的 manifest 渲染 `Formula/fm.rb`，跑
+   `brew style`/`brew audit --online` 后在本仓库开 `release/fm-<version>`
+   分支 PR,人工 review 合并，workflow 不自动合并。
 
 macOS 产物不做 Apple 签名/公证（与 googleworkspace/cli 等 CLI 的发行方式
 一致）：经 `brew install` 安装的 formula 下载不携带 quarantine 属性，不会
 触发 Gatekeeper；直接从浏览器下载 archive 手动安装则会被 Gatekeeper 拦截，
 不作为受支持的安装路径。
 
-发布所需的环境与 secrets（均不进入仓库）：
-
-- GitHub environment `release`,deployment branches 限制为 `main`;
-- `HOMEBREW_TAP_TOKEN`（建在 environment 级别）:fine-grained PAT，对
-  `feed-mob/homebrew-tap` 有 contents:write + pull_requests:write。
+发布只需一个 GitHub environment `release`（deployment branches 限制为
+`main`)；所有写操作使用 workflow 自带的 `GITHUB_TOKEN`，不需要任何额外
+secret。
 
 正式发布不使用 PKG。
 
