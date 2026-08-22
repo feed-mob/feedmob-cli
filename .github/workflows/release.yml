@@ -34,7 +34,10 @@ jobs:
         run: |
           test "$RELEASE_VERSION" = "$(ruby -Ilib -r feedmob/cli/version -e 'print FeedMob::CLI::VERSION')"
           ruby -e 'abort "Invalid version" unless ENV.fetch("RELEASE_VERSION").match?(/\A\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?\z/)'
+      # Publish-only gates: dry runs must be able to build from any branch so
+      # release changes can be verified before merging.
       - name: Verify source commit is on the default branch
+        if: inputs.publish
         env:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
@@ -48,6 +51,7 @@ jobs:
               ;;
           esac
       - name: Verify the version was not released before
+        if: inputs.publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_VERSION: ${{ inputs.version }}
