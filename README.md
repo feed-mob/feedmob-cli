@@ -114,5 +114,6 @@ a stable JSON envelope to stdout, including errors:
 
 ## Development and releasing
 
-See [docs/release.md](docs/release.md) for the Tebako/Homebrew release
+See [docs/development.md](docs/development.md) for local setup and testing,
+and [docs/release.md](docs/release.md) for the Tebako/Homebrew release
 pipeline and maintainer workflow.
