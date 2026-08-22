@@ -1,31 +1,31 @@
 tebako:
-  release_version: "0.1.0"
-  format_version: "0.15.9"
+  release_version: "0.1.9"
+  format_version: "0.16.4"
   ruby_version: "4.0.1"
   targets:
     macos-arm64:
       os: macos
       architecture: arm64
       archive: fm-darwin-arm64.tar.gz
-      tebako_url: https://github.com/tamatebako/tebako/releases/download/v0.1.0/tebako-0.1.0-macos-arm64
-      tebako_sha256: "f4d5ad287a4a1721f111320a8c61febca143332e4788a337750a107f496acbd4"
+      tebako_url: https://github.com/tamatebako/tebako/releases/download/v0.1.9/tebako-0.1.9-macos-arm64
+      tebako_sha256: "0e0d964ce1f08afa7f6d2d709da0a0f1c7e01b4b01f87530181f0439555755be"
     macos-x86_64:
       os: macos
       architecture: x86_64
       archive: fm-darwin-x86_64.tar.gz
-      tebako_url: https://github.com/tamatebako/tebako/releases/download/v0.1.0/tebako-0.1.0-macos-x86_64
-      tebako_sha256: "211b39a3e79a241da0836f7d3caa216512f68bbfe982bec715770078b25c2011"
+      tebako_url: https://github.com/tamatebako/tebako/releases/download/v0.1.9/tebako-0.1.9-macos-x86_64
+      tebako_sha256: "30e20bfb292fa7c2b17a878cfb367e76073feefd6128b0cad0896a7dd765a2f6"
     linux-arm64:
       os: linux
       architecture: arm64
       archive: fm-linux-arm64.tar.gz
-      glibc_max: "2.39"
-      tebako_url: https://github.com/tamatebako/tebako/releases/download/v0.1.0/tebako-0.1.0-linux-gnu-arm64
-      tebako_sha256: "efcedda40608b9456e50289cc3626b957869058996f22aa2f2a6d11c4608ed9b"
+      glibc_max: "2.35"
+      tebako_url: https://github.com/tamatebako/tebako/releases/download/v0.1.9/tebako-0.1.9-linux-gnu-arm64
+      tebako_sha256: "1d1b7a3512c98eedde0cec892ee5f875e283d2af39aea9e0552babbfca4c42b6"
     linux-x86_64:
       os: linux
       architecture: x86_64
       archive: fm-linux-x86_64.tar.gz
-      glibc_max: "2.39"
-      tebako_url: https://github.com/tamatebako/tebako/releases/download/v0.1.0/tebako-0.1.0-linux-gnu-x86_64
-      tebako_sha256: "8f442f52bdd8b0085870a71254955f33d9eb8cd4814f0909483db03546937412"
+      glibc_max: "2.35"
+      tebako_url: https://github.com/tamatebako/tebako/releases/download/v0.1.9/tebako-0.1.9-linux-gnu-x86_64
+      tebako_sha256: "07c51fd950c3a1be74ecfcc5e6944408fcdbff9d377901dd6af7b595861a1cbb"

@@ -13,11 +13,13 @@ OptionParser.new do |parser|
   parser.on('--config PATH') { |path| options[:config] = File.expand_path(path) }
   parser.on('--target TARGET', FeedMobRelease::TARGET_IDS) { |target| options[:target] = target }
   parser.on('--artifact PATH') { |path| options[:artifact] = File.expand_path(path) }
+  parser.on('--tebako PATH') { |path| options[:tebako] = File.expand_path(path) }
   parser.on('--output PATH') { |path| options[:output] = File.expand_path(path) }
 end.parse!
 
 target_id = options.fetch(:target)
 artifact = options.fetch(:artifact)
+tebako = options.fetch(:tebako)
 output = options.fetch(:output)
 config_path = options.fetch(:config)
 config = FeedMobRelease.load_config(config_path)
@@ -33,6 +35,7 @@ validated = system(
   File.join(__dir__, 'verify-release-artifact'),
   '--config', config_path,
   '--target', target_id,
+  '--tebako', tebako,
   artifact
 )
 abort "#{target_id} standalone artifact validation failed" unless validated

@@ -57,7 +57,9 @@ end
 validated = system(
   RbConfig.ruby,
   File.join(__dir__, 'verify-release-artifact'),
+  '--config', config_path,
   '--target', target_id,
+  '--tebako', tebako,
   output
 )
 abort 'Release artifact validation failed' unless validated

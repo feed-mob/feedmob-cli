@@ -102,7 +102,7 @@ jobs:
         if: startsWith(matrix.target, 'linux-')
         run: script/smoke-release-auth --artifact "$RUNNER_TEMP/fm"
       - name: Package native release asset
-        run: script/package-homebrew-artifact --target ${{ matrix.target }} --artifact "$RUNNER_TEMP/fm" --output "$RUNNER_TEMP/release-assets"
+        run: script/package-homebrew-artifact --target ${{ matrix.target }} --artifact "$RUNNER_TEMP/fm" --tebako "$RUNNER_TEMP/tebako" --output "$RUNNER_TEMP/release-assets"
       - name: Build summary
         run: |
           {

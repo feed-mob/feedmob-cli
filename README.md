@@ -49,12 +49,20 @@ fm version
 
 支持的发布目标为 `macos-arm64`、`macos-x86_64`、`linux-arm64` 与
 `linux-x86_64`。正式产物必须在对应 OS/CPU 的原生 runner 上构建和运行验证；
-Rosetta/QEMU 只能作为开发辅助。首个 Linux 支持基线是 Ubuntu 24.04-compatible
-GNU/glibc 系统（`glibc >= 2.39`，由 Tebako 0.1.0 官方 Linux 工具的 version
-requirement 实测决定），不支持 Alpine/musl。
+Rosetta/QEMU 只能作为开发辅助。首个 Linux 支持基线是 Ubuntu 22.04-compatible
+GNU/glibc 系统（`glibc >= 2.35`，由 Tebako 0.1.9 官方 Linux 工具与 0.16.4
+runtime 产物的 version requirement 实测决定，实际只需 `glibc >= 2.30`），
+不支持 Alpine/musl。
 
-单目标构建会下载已固定 SHA-256 的 Tebako 工具、生成 fat standalone，并在原生
-平台验证顶层和内嵌 Mach-O/ELF 架构、Linux glibc requirement、解包内容和无
+Tebako 0.16.x 是 image-era runtime：产物内嵌解释器，但 runtime image
+（约 11 MB 的 `.tfs`）在首次运行时从 tamatebako 官方 Release 下载一次，
+经 SHA-256 校验后缓存于 `~/.tebako/runtimes/`（机器级共享，之后的运行不再
+访问网络）。因此终端用户的首次 `fm` 运行需要能访问 github.com；可用
+`TEBAKO_RUNTIME_MIRROR`（https 或 file://）指向内部镜像。
+
+单目标构建会下载已固定 SHA-256 的 Tebako 工具、生成 standalone 包，并在原生
+平台验证顶层 Mach-O/ELF 架构、Linux glibc requirement、`tebako inspect`
+runtime 来源（runtime_ref 必须匹配固定的 Ruby 与 Tebako 版本）和无
 Ruby/Gem 环境下的 version smoke：
 
 ```sh

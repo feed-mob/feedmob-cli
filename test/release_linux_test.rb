@@ -13,15 +13,19 @@ class ReleaseLinuxTest < Minitest::Test
     skip 'Linux-only tests' unless host_os == 'linux'
   end
 
-  def test_release_artifact_validator_extracts_and_runs_version_smoke
+  def test_release_artifact_validator_inspects_and_runs_version_smoke
     Dir.mktmpdir('feedmob-cli-fake-tebako') do |temporary_directory|
       artifact = File.join(temporary_directory, 'fake-fm')
       compile_fake_artifact(artifact, temporary_directory)
+      tebako = write_fake_tebako_tool(temporary_directory)
 
-      stdout, stderr, status = run_script('verify-release-artifact', '--target', host_target_id, artifact)
+      stdout, stderr, status = run_script(
+        'verify-release-artifact', '--target', host_target_id, '--tebako', tebako, artifact
+      )
 
       assert_predicate status, :success?, "#{stdout}\n#{stderr}"
       assert_includes stdout, "Top-level target: #{host_target_id}"
+      assert_includes stdout, 'Runtime provenance: ruby@4.0.1;tebako=0.16.4;'
       assert_includes stdout, 'Version smoke: 0.1.0'
     end
   end
@@ -30,10 +34,13 @@ class ReleaseLinuxTest < Minitest::Test
     Dir.mktmpdir('feedmob-cli-fake-tebako') do |temporary_directory|
       artifact = File.join(temporary_directory, 'fake-fm')
       compile_fake_artifact(artifact, temporary_directory)
+      tebako = write_fake_tebako_tool(temporary_directory)
       foreign = host_architecture == 'arm64' ? 'x86_64' : 'arm64'
       patch_elf_machine(artifact, ELF_MACHINE_IDS.fetch(foreign))
 
-      _stdout, stderr, status = run_script('verify-release-artifact', '--target', host_target_id, artifact)
+      _stdout, stderr, status = run_script(
+        'verify-release-artifact', '--target', host_target_id, '--tebako', tebako, artifact
+      )
 
       refute_predicate status, :success?
       assert_includes stderr, "does not contain #{host_architecture} code"
@@ -44,13 +51,15 @@ class ReleaseLinuxTest < Minitest::Test
     Dir.mktmpdir('feedmob-cli-fake-tebako') do |temporary_directory|
       artifact = File.join(temporary_directory, 'fake-fm')
       compile_fake_artifact(artifact, temporary_directory)
+      tebako = write_fake_tebako_tool(temporary_directory)
       config = valid_release_config do |c|
         c.dig('tebako', 'targets', host_target_id)['glibc_max'] = '2.0'
       end
 
       with_config_file(config) do |config_path|
         _stdout, stderr, status = run_script(
-          'verify-release-artifact', '--config', config_path, '--target', host_target_id, artifact
+          'verify-release-artifact',
+          '--config', config_path, '--target', host_target_id, '--tebako', tebako, artifact
         )
 
         refute_predicate status, :success?
@@ -63,8 +72,11 @@ class ReleaseLinuxTest < Minitest::Test
     Dir.mktmpdir('feedmob-cli-fake-tebako') do |temporary_directory|
       artifact = File.join(temporary_directory, 'fake-fm')
       compile_with_vanished_dependency(artifact, temporary_directory)
+      tebako = write_fake_tebako_tool(temporary_directory)
 
-      _stdout, stderr, status = run_script('verify-release-artifact', '--target', host_target_id, artifact)
+      _stdout, stderr, status = run_script(
+        'verify-release-artifact', '--target', host_target_id, '--tebako', tebako, artifact
+      )
 
       refute_predicate status, :success?
       assert_includes stderr, 'Missing dynamic dependency'
@@ -76,11 +88,13 @@ class ReleaseLinuxTest < Minitest::Test
       artifact = File.join(temporary_directory, 'fake-fm')
       output = File.join(temporary_directory, 'output')
       compile_fake_artifact(artifact, temporary_directory)
+      tebako = write_fake_tebako_tool(temporary_directory)
 
       stdout, stderr, status = run_script(
         'package-homebrew-artifact',
         '--target', host_target_id,
         '--artifact', artifact,
+        '--tebako', tebako,
         '--output', output
       )
 
