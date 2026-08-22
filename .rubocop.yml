@@ -1,7 +1,14 @@
+inherit_mode:
+  merge:
+    - Exclude
+
 AllCops:
   TargetRubyVersion: 3.2
   NewCops: enable
   SuggestExtensions: false
+  Exclude:
+    # Homebrew formulas follow brew style, not project RuboCop
+    - 'Formula/**/*'
 
 Metrics/AbcSize:
   Enabled: false
