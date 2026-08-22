@@ -5,16 +5,16 @@ credentials for Pixel and Time Off, verifies identity, and issues read-only
 API requests — with stable JSON output designed for scripts and automation.
 
 ```text
-fm [--json] doctor
-fm [--json] version
-fm [--json] pixel auth login [--token-stdin]
-fm [--json] pixel auth status
-fm [--json] pixel auth logout
-fm [--json] pixel request get <path>
-fm [--json] time-off auth login [--token-stdin]
-fm [--json] time-off auth status
-fm [--json] time-off auth logout
-fm [--json] time-off request get <path>
+fm doctor
+fm version
+fm pixel auth login [--token-stdin]
+fm pixel auth status
+fm pixel auth logout
+fm pixel request get <path>
+fm time-off auth login [--token-stdin]
+fm time-off auth status
+fm time-off auth logout
+fm time-off request get <path>
 ```
 
 ## Installation
