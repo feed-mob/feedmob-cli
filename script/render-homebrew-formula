@@ -44,7 +44,6 @@ formula = <<~RUBY
   class Fm < Formula
     desc "Command-line interface for FeedMob services"
     homepage "https://github.com/feed-mob/feedmob-cli"
-    version "#{version}"
     license "MIT"
 
     on_macos do
