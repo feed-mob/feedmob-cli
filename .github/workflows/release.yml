@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       publish:
-        description: Reserved for the protected publish workflow; this workflow never publishes.
+        description: Publish the GitHub Release and prepare the Tap PR (requires the protected release environment).
         required: true
         default: false
         type: boolean
@@ -85,6 +85,9 @@ jobs:
           - target: linux-x86_64
             runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
+    # Signing secrets live in the protected `release` environment. Dry runs
+    # resolve to an unprotected placeholder so they never wait for approval.
+    environment: ${{ (inputs.publish && startsWith(matrix.target, 'macos-')) && 'release' || 'dry-run' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -101,6 +104,18 @@ jobs:
       - name: Linux encrypted credential smoke
         if: startsWith(matrix.target, 'linux-')
         run: script/smoke-release-auth --artifact "$RUNNER_TEMP/fm"
+      # Signing must happen before packaging: the archive has to contain the
+      # exact notarized bytes. Publish runs only; secrets never leave the
+      # protected environment and the script never prints them.
+      - name: Sign and notarize macOS artifact
+        if: inputs.publish && startsWith(matrix.target, 'macos-')
+        env:
+          DEVELOPER_ID_APPLICATION_P12: ${{ secrets.DEVELOPER_ID_APPLICATION_P12 }}
+          DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
+          NOTARYTOOL_API_KEY_P8: ${{ secrets.NOTARYTOOL_API_KEY_P8 }}
+          NOTARYTOOL_KEY_ID: ${{ secrets.NOTARYTOOL_KEY_ID }}
+          NOTARYTOOL_ISSUER: ${{ secrets.NOTARYTOOL_ISSUER }}
+        run: script/sign-macos-artifact --target ${{ matrix.target }} --tebako "$RUNNER_TEMP/tebako" --artifact "$RUNNER_TEMP/fm"
       - name: Package native release asset
         run: script/package-homebrew-artifact --target ${{ matrix.target }} --artifact "$RUNNER_TEMP/fm" --tebako "$RUNNER_TEMP/tebako" --output "$RUNNER_TEMP/release-assets"
       - name: Build summary
@@ -109,11 +124,11 @@ jobs:
             echo "- target: ${{ matrix.target }} ($(uname -s) $(uname -m))"
             echo "- archive: $(cat "$RUNNER_TEMP"/release-assets/*.sha256)"
           } >> "$GITHUB_STEP_SUMMARY"
-      # macOS binaries are not signed in this dry-run workflow; the artifact
-      # name marks them so they can never be mistaken for release assets.
+      # macOS binaries from dry runs are not signed; the artifact name marks
+      # them so they can never be mistaken for release assets.
       - uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.target }}${{ startsWith(matrix.target, 'macos-') && '-unsigned' || '' }}
+          name: release-${{ matrix.target }}${{ (!inputs.publish && startsWith(matrix.target, 'macos-')) && '-unsigned' || '' }}
           path: ${{ runner.temp }}/release-assets/*
           if-no-files-found: error
           retention-days: 7
@@ -145,3 +160,97 @@ jobs:
           printf '\n```json\n' >> "$GITHUB_STEP_SUMMARY"
           cat "$RUNNER_TEMP/release-output/release-assets.json" >> "$GITHUB_STEP_SUMMARY"
           printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish GitHub Release
+    if: inputs.publish
+    needs: assemble
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: feedmob-cli-${{ inputs.version }}-release-assets
+          path: ${{ runner.temp }}/release-output
+      - name: Draft, verify, and publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: script/publish-release --version ${{ inputs.version }} --input "$RUNNER_TEMP/release-output" --manifest-out "$RUNNER_TEMP/release-assets-with-ids.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-with-ids
+          path: ${{ runner.temp }}/release-assets-with-ids.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Publish summary
+        run: 'echo "- published: https://github.com/feed-mob/feedmob-cli/releases/tag/v${{ inputs.version }}" >> "$GITHUB_STEP_SUMMARY"'
+
+  tap-pr:
+    name: Prepare Homebrew Tap PR
+    if: inputs.publish
+    needs: publish
+    runs-on: ubuntu-24.04
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: feedmob-cli
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+      # The PAT needs contents:write + pull_requests:write on
+      # feed-mob/homebrew-tap and contents:read on feed-mob/feedmob-cli (the
+      # formula audit downloads the private release assets).
+      - uses: actions/checkout@v4
+        with:
+          repository: feed-mob/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets-with-ids
+          path: ${{ runner.temp }}
+      - name: Render Formula into the Tap
+        run: feedmob-cli/script/render-homebrew-formula --version ${{ inputs.version }} --assets-json "$RUNNER_TEMP/release-assets-with-ids.json" --output homebrew-tap/Formula/fm.rb
+      - name: Homebrew style and audit
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+          mkdir -p "$(brew --repository)/Library/Taps/feed-mob"
+          ln -sfn "$GITHUB_WORKSPACE/homebrew-tap" "$(brew --repository)/Library/Taps/feed-mob/homebrew-tap"
+          brew style feed-mob/tap/fm
+          brew audit --online feed-mob/tap/fm
+      - name: Open the Tap PR
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          cd homebrew-tap
+          git config user.name feedmob-release
+          git config user.email release@feedmob.invalid
+          git switch -c "codex/fm-${{ inputs.version }}"
+          git add Formula/fm.rb
+          git commit -m "fm ${{ inputs.version }}"
+          git push -u origin "codex/fm-${{ inputs.version }}"
+          CHECKSUMS=$(ruby -rjson -e 'JSON.parse(File.read(ARGV[0])).fetch("assets").each_value { |a| puts "#{a.fetch("sha256")}  #{a.fetch("name")}" }' "$RUNNER_TEMP/release-assets-with-ids.json")
+          gh pr create --repo feed-mob/homebrew-tap \
+            --title "fm ${{ inputs.version }}" \
+            --body "Release: https://github.com/feed-mob/feedmob-cli/releases/tag/v${{ inputs.version }}
+
+          Built and verified by ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} (four native targets, real Tebako press, Linux credential smoke, signed/notarized macOS artifacts).
+
+          \`\`\`
+          ${CHECKSUMS}
+          \`\`\`
+
+          Manual review required; the release workflow never merges Tap PRs."
+      - name: Tap PR summary
+        run: echo "- Tap PR opened from branch codex/fm-${{ inputs.version }}; review and merge manually" >> "$GITHUB_STEP_SUMMARY"

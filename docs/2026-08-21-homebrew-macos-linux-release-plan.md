@@ -614,6 +614,13 @@ end
 
 ### Phase 8：新增受保护 Release workflow
 
+**实施记录（2026-08-22）：** dry-run 部分已随 PR #8/#9 落地；publish 部分（签名/公证、Release 发布、Tap PR）按以下定稿实现：
+
+- 签名并入 macOS 两个 build job（`publish=true` 时经条件 `environment: release` 取 secrets)，在 package 之前执行，保证 archive 字节即公证字节；dry-run 解析到无保护的 `dry-run` environment，不会被 approval 阻塞。
+- 公证凭据定为 App Store Connect API key(`NOTARYTOOL_API_KEY_P8`/`NOTARYTOOL_KEY_ID`/`NOTARYTOOL_ISSUER`)。
+- Tap 写入定为 fine-grained PAT(`HOMEBREW_TAP_TOKEN`)，首个正式版本 0.1.0。
+- `tree` 复验随 `verify-release-tree` 删除改为签名后重跑 `verify-release-artifact`(格式/glibc/inspect runtime_ref/version smoke)。
+
 **目标：** 可重复地产出四平台文件；默认 dry run，只有人工批准的 publish 才改变 GitHub Release 或 Tap。
 
 **文件：**
