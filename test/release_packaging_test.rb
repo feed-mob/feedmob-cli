@@ -115,6 +115,36 @@ class ReleasePackagingTest < Minitest::Test
     assert_includes stderr, 'only runs on Linux'
   end
 
+  def test_publish_release_requires_a_token
+    _stdout, stderr, status = Open3.capture3(
+      { 'GH_TOKEN' => nil },
+      RbConfig.ruby, File.join(PROJECT_ROOT, 'script', 'publish-release'),
+      '--version', '0.1.0', '--input', __dir__, '--manifest-out', File::NULL
+    )
+
+    refute_predicate status, :success?
+    assert_includes stderr, 'GH_TOKEN is not set'
+  end
+
+  def test_publish_release_rejects_a_manifest_version_mismatch
+    Dir.mktmpdir('feedmob-cli-publish') do |temporary_directory|
+      File.write(
+        File.join(temporary_directory, 'release-assets.json'),
+        JSON.generate('version' => '9.9.9', 'assets' => {})
+      )
+
+      _stdout, stderr, status = Open3.capture3(
+        { 'GH_TOKEN' => 'unused' },
+        RbConfig.ruby, File.join(PROJECT_ROOT, 'script', 'publish-release'),
+        '--version', '0.1.0', '--input', temporary_directory,
+        '--manifest-out', File.join(temporary_directory, 'out.json')
+      )
+
+      refute_predicate status, :success?
+      assert_includes stderr, 'does not match 0.1.0'
+    end
+  end
+
   def test_prepare_release_root_contains_only_runtime_application_files
     Dir.mktmpdir('feedmob-cli-release-root') do |temporary_directory|
       destination = File.join(temporary_directory, 'root')

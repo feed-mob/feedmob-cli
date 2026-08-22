@@ -614,6 +614,12 @@ end
 
 ### Phase 8：新增受保护 Release workflow
 
+**实施记录（2026-08-22）：** dry-run 部分已随 PR #8/#9 落地；publish 部分按以下定稿实现：
+
+- **所有者决定不做 Apple 签名/公证**（不申请 Developer ID)，参考 googleworkspace/cli 等 CLI 的发行先例：formula 经 `brew install` 下载不携带 quarantine 属性，不触发 Gatekeeper；浏览器直接下载手动安装不是受支持路径。§3.5 与 Job C 因此移除。
+- Tap 写入定为 fine-grained PAT(`HOMEBREW_TAP_TOKEN`)，首个正式版本 0.1.0。
+- Job E 由 `script/publish-release` 实现（draft → 上传 → API 回读 name/size/digest → 取消 draft),Job F 在 Tap 跑 style/audit 后开 PR，不自动合并。
+
 **目标：** 可重复地产出四平台文件；默认 dry run，只有人工批准的 publish 才改变 GitHub Release 或 Tap。
 
 **文件：**

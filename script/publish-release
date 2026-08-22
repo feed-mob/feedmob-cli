@@ -1,0 +1,82 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Publishes an assembled release to GitHub: draft release -> upload -> API
+# read-back verification (name, size, digest per asset) -> undraft. Any
+# failure leaves the release as a draft; a published release is never
+# modified. Requires GH_TOKEN with contents:write on feed-mob/feedmob-cli.
+
+require 'json'
+require 'open3'
+require 'optparse'
+require_relative 'release_support'
+
+REPO = 'feed-mob/feedmob-cli'
+
+options = {}
+OptionParser.new do |parser|
+  parser.on('--version VERSION') { |value| options[:version] = value }
+  parser.on('--input PATH') { |path| options[:input] = File.expand_path(path) }
+  parser.on('--manifest-out PATH') { |path| options[:manifest_out] = File.expand_path(path) }
+end.parse!
+
+version = options.fetch(:version)
+input = options.fetch(:input)
+manifest_out = options.fetch(:manifest_out)
+abort "Invalid version: #{version}" unless version.match?(/\A\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?\z/)
+abort 'GH_TOKEN is not set' if ENV['GH_TOKEN'].to_s.empty?
+
+manifest_path = File.join(input, 'release-assets.json')
+abort "Missing #{manifest_path}" unless File.file?(manifest_path)
+manifest = JSON.parse(File.read(manifest_path))
+abort "Manifest version #{manifest.fetch('version')} does not match #{version}" if manifest.fetch('version') != version
+assets = manifest.fetch('assets')
+abort 'Manifest targets mismatch' unless assets.keys.sort == FeedMobRelease::TARGET_IDS.sort
+
+sums_path = File.join(input, 'SHA256SUMS')
+uploads = assets.values.map { |asset| File.join(input, asset.fetch('name')) } + [sums_path]
+uploads.each { |path| abort "Missing upload file: #{path}" unless File.file?(path) }
+
+def gh!(*arguments)
+  stdout, stderr, status = Open3.capture3('gh', *arguments)
+  abort "gh #{arguments.first(2).join(' ')} failed: #{stderr}#{stdout}" unless status.success?
+
+  stdout
+end
+
+tag = "v#{version}"
+_view, _err, view_status = Open3.capture3('gh', 'release', 'view', tag, '--repo', REPO)
+abort "#{tag} already exists; never overwrite a release" if view_status.success?
+
+notes = ["fm #{version}", '', '```', File.read(sums_path).strip, '```'].join("\n")
+gh!(
+  'release', 'create', tag, '--repo', REPO, '--draft',
+  '--title', "fm #{version}", '--notes', notes, *uploads
+)
+puts "Created draft release #{tag}"
+
+release = JSON.parse(gh!('api', "repos/#{REPO}/releases/tags/#{tag}"))
+remote_assets = JSON.parse(gh!('api', "repos/#{REPO}/releases/#{release.fetch('id')}/assets?per_page=100"))
+by_name = remote_assets.to_h { |asset| [asset.fetch('name'), asset] }
+
+expected_names = assets.values.map { |asset| asset.fetch('name') } + ['SHA256SUMS']
+missing = expected_names - by_name.keys
+abort "Release is missing assets: #{missing.join(', ')}" unless missing.empty?
+
+assets.each_value do |asset|
+  remote = by_name.fetch(asset.fetch('name'))
+  local = File.join(input, asset.fetch('name'))
+  abort "Size mismatch for #{asset.fetch('name')}" unless remote.fetch('size') == File.size(local)
+  digest = remote['digest'].to_s
+  abort "Missing digest for #{asset.fetch('name')}" if digest.empty?
+  abort "Digest mismatch for #{asset.fetch('name')}" unless digest == "sha256:#{asset.fetch('sha256')}"
+  asset['asset_id'] = remote.fetch('id')
+end
+abort 'Duplicate asset IDs in release' unless assets.values.map { |asset| asset['asset_id'] }.uniq.length == 4
+puts 'Read-back verification passed for all assets'
+
+File.write(manifest_out, "#{JSON.pretty_generate(manifest)}\n")
+puts "Wrote asset-ID manifest: #{manifest_out}"
+
+gh!('release', 'edit', tag, '--repo', REPO, '--draft=false')
+puts "Published #{tag}"

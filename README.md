@@ -109,12 +109,35 @@ Formula 使用 GitHub Release Asset API，并从用户环境读取
 不会删除 Keychain 或 Linux 加密凭据；需要彻底清理时，先执行对应服务的
 `fm ... auth logout`。
 
-`.github/workflows/release.yml` 目前是手动触发的 dry-run：它只构建、验证并保留
-workflow artifact，绝不创建 GitHub Release 或修改 Tap。Linux 构建还会通过
+`.github/workflows/release.yml` 由 `workflow_dispatch` 手动触发。`publish=false`
+（默认）是 dry-run：只构建、验证并保留 workflow artifact，绝不创建 GitHub
+Release 或修改 Tap。Linux 构建还会通过
 `script/smoke-release-auth` 对打包产物执行 encrypted-file 凭据的
 login/status/logout 端到端验证（loopback fake API + sentinel token）。
-正式发布仍需单独配置受保护环境、Developer ID 签名、公证和 Tap PR 工作流；
-本流水线不使用 PKG。
+
+`publish=true` 走完整发布，全部写操作都挂在受保护的 `release` environment
+（需要人工批准）之后：
+
+1. `publish` job 用 `script/publish-release` 创建 draft Release、上传四个
+   archive 与 `SHA256SUMS`、通过 API 回读每个 asset 的 name/size/digest
+   校验后才取消 draft；任何失败只保留 draft，绝不覆盖已发布版本；
+2. `tap-pr` job 用回读到的 asset ID 渲染 Formula，在 `feed-mob/homebrew-tap`
+   跑 `brew style`/`brew audit --online` 后开 `codex/fm-<version>` 分支 PR,
+   人工 review 合并，workflow 不自动合并。
+
+macOS 产物不做 Apple 签名/公证（与 googleworkspace/cli 等 CLI 的发行方式
+一致）：经 `brew install` 安装的 formula 下载不携带 quarantine 属性，不会
+触发 Gatekeeper；直接从浏览器下载 archive 手动安装则会被 Gatekeeper 拦截，
+不作为受支持的安装路径。
+
+发布所需的环境与 secrets（均不进入仓库）：
+
+- GitHub environment `release`，配置 required reviewers;
+- `HOMEBREW_TAP_TOKEN`:fine-grained PAT，对 `feed-mob/homebrew-tap` 有
+  contents:write + pull_requests:write，对 `feed-mob/feedmob-cli` 有
+  contents:read（供 formula audit 下载私有 asset)。
+
+正式发布不使用 PKG。
 
 ## 认证
 
