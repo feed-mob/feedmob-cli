@@ -621,6 +621,8 @@ end
 - `release` environment 限制 `main` 分支部署，publish 另要求 `confirm=release` 输入作为人工门禁。
 - Job E 由 `script/publish-release` 实现（draft → 上传 → API 回读 name/size/digest → 取消 draft),Job F(formula-pr）跑 style/audit 后开 PR，不自动合并。
 
+**实施记录（2026-08-22，首次正式发布）：** v0.1.0 已发布，Formula 经 PR #16 合并，`brew tap feed-mob/tap https://github.com/feed-mob/feedmob-cli.git && brew install feed-mob/tap/fm` 全链路实测通过。首次发布暴露并修复了三个问题：draft release 无 git tag 导致 `releases/tags/<tag>` 回读 404（PR #14，改用 list 接口回读）；失败运行残留的 draft 与 tag 触发 validate 门禁（手动清理，门禁行为正确）；`brew audit --online` 拒绝与 URL 扫描结果冗余的显式 `version` 行（PR #15 移除）。另将 `Formula/` 排除出项目 RuboCop（遵循 brew style），自定义 `Exclude` 需配 `inherit_mode: merge` 以保留默认的 `vendor/**` 排除（PR #16 附带修复）。上游 tebako 已发布 v0.2.x（签名 tpkg trailer），后续迁移可消除每次运行的 unsigned-trailer 警告。
+
 **目标：** 可重复地产出四平台文件；默认 dry run，只有人工批准的 publish 才改变 GitHub Release 或 Tap。
 
 **文件：**
