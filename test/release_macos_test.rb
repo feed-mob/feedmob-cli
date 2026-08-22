@@ -95,26 +95,6 @@ class ReleaseMacosTest < Minitest::Test
     end
   end
 
-  def test_sign_macos_artifact_reports_missing_secrets
-    Dir.mktmpdir('feedmob-cli-signing') do |temporary_directory|
-      artifact = File.join(temporary_directory, 'fake-fm')
-      compile_fake_artifact(artifact, temporary_directory)
-      env = %w[
-        DEVELOPER_ID_APPLICATION_P12 DEVELOPER_ID_APPLICATION_P12_PASSWORD
-        NOTARYTOOL_API_KEY_P8 NOTARYTOOL_KEY_ID NOTARYTOOL_ISSUER
-      ].to_h { |name| [name, nil] }
-
-      _stdout, stderr, status = Open3.capture3(
-        env,
-        RbConfig.ruby, File.join(PROJECT_ROOT, 'script', 'sign-macos-artifact'),
-        '--target', host_target_id, '--tebako', __FILE__, '--artifact', artifact
-      )
-
-      refute_predicate status, :success?
-      assert_includes stderr, 'Missing signing secrets: DEVELOPER_ID_APPLICATION_P12'
-    end
-  end
-
   private
 
   def verify_tool_with_matching_sha(tool)

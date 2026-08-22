@@ -115,17 +115,6 @@ class ReleasePackagingTest < Minitest::Test
     assert_includes stderr, 'only runs on Linux'
   end
 
-  def test_sign_macos_artifact_rejects_linux_targets
-    linux_target = "linux-#{host_architecture}"
-
-    _stdout, stderr, status = run_script(
-      'sign-macos-artifact', '--target', linux_target, '--tebako', __FILE__, '--artifact', __FILE__
-    )
-
-    refute_predicate status, :success?
-    assert_includes stderr, 'only supports macOS targets'
-  end
-
   def test_publish_release_requires_a_token
     _stdout, stderr, status = Open3.capture3(
       { 'GH_TOKEN' => nil },

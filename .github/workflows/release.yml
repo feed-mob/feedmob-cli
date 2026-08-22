@@ -85,9 +85,6 @@ jobs:
           - target: linux-x86_64
             runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
-    # Signing secrets live in the protected `release` environment. Dry runs
-    # resolve to an unprotected placeholder so they never wait for approval.
-    environment: ${{ (inputs.publish && startsWith(matrix.target, 'macos-')) && 'release' || 'dry-run' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -104,18 +101,6 @@ jobs:
       - name: Linux encrypted credential smoke
         if: startsWith(matrix.target, 'linux-')
         run: script/smoke-release-auth --artifact "$RUNNER_TEMP/fm"
-      # Signing must happen before packaging: the archive has to contain the
-      # exact notarized bytes. Publish runs only; secrets never leave the
-      # protected environment and the script never prints them.
-      - name: Sign and notarize macOS artifact
-        if: inputs.publish && startsWith(matrix.target, 'macos-')
-        env:
-          DEVELOPER_ID_APPLICATION_P12: ${{ secrets.DEVELOPER_ID_APPLICATION_P12 }}
-          DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
-          NOTARYTOOL_API_KEY_P8: ${{ secrets.NOTARYTOOL_API_KEY_P8 }}
-          NOTARYTOOL_KEY_ID: ${{ secrets.NOTARYTOOL_KEY_ID }}
-          NOTARYTOOL_ISSUER: ${{ secrets.NOTARYTOOL_ISSUER }}
-        run: script/sign-macos-artifact --target ${{ matrix.target }} --tebako "$RUNNER_TEMP/tebako" --artifact "$RUNNER_TEMP/fm"
       - name: Package native release asset
         run: script/package-homebrew-artifact --target ${{ matrix.target }} --artifact "$RUNNER_TEMP/fm" --tebako "$RUNNER_TEMP/tebako" --output "$RUNNER_TEMP/release-assets"
       - name: Build summary
@@ -124,11 +109,9 @@ jobs:
             echo "- target: ${{ matrix.target }} ($(uname -s) $(uname -m))"
             echo "- archive: $(cat "$RUNNER_TEMP"/release-assets/*.sha256)"
           } >> "$GITHUB_STEP_SUMMARY"
-      # macOS binaries from dry runs are not signed; the artifact name marks
-      # them so they can never be mistaken for release assets.
       - uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.target }}${{ (!inputs.publish && startsWith(matrix.target, 'macos-')) && '-unsigned' || '' }}
+          name: release-${{ matrix.target }}
           path: ${{ runner.temp }}/release-assets/*
           if-no-files-found: error
           retention-days: 7
@@ -245,7 +228,7 @@ jobs:
             --title "fm ${{ inputs.version }}" \
             --body "Release: https://github.com/feed-mob/feedmob-cli/releases/tag/v${{ inputs.version }}
 
-          Built and verified by ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} (four native targets, real Tebako press, Linux credential smoke, signed/notarized macOS artifacts).
+          Built and verified by ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} (four native targets, real Tebako press, Linux credential smoke).
 
           \`\`\`
           ${CHECKSUMS}

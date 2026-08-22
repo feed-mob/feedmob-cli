@@ -111,32 +111,28 @@ Formula 使用 GitHub Release Asset API，并从用户环境读取
 
 `.github/workflows/release.yml` 由 `workflow_dispatch` 手动触发。`publish=false`
 （默认）是 dry-run：只构建、验证并保留 workflow artifact，绝不创建 GitHub
-Release 或修改 Tap;macOS 产物以 `-unsigned` 后缀标记。Linux 构建还会通过
+Release 或修改 Tap。Linux 构建还会通过
 `script/smoke-release-auth` 对打包产物执行 encrypted-file 凭据的
 login/status/logout 端到端验证（loopback fake API + sentinel token）。
 
 `publish=true` 走完整发布，全部写操作都挂在受保护的 `release` environment
 （需要人工批准）之后：
 
-1. macOS 两个构建 job 在打包前执行 `script/sign-macos-artifact`：临时
-   keychain + Developer ID Application（hardened runtime + timestamp）签名、
-   `codesign --verify --deep --strict`、`notarytool` 公证（App Store Connect
-   API key)、stapler 尝试，签名后对同一文件重新完整验证并输出
-   provenance（签名前后 SHA-256 与 notarytool request ID）;
-2. `publish` job 用 `script/publish-release` 创建 draft Release、上传四个
+1. `publish` job 用 `script/publish-release` 创建 draft Release、上传四个
    archive 与 `SHA256SUMS`、通过 API 回读每个 asset 的 name/size/digest
    校验后才取消 draft；任何失败只保留 draft，绝不覆盖已发布版本；
-3. `tap-pr` job 用回读到的 asset ID 渲染 Formula，在 `feed-mob/homebrew-tap`
+2. `tap-pr` job 用回读到的 asset ID 渲染 Formula，在 `feed-mob/homebrew-tap`
    跑 `brew style`/`brew audit --online` 后开 `codex/fm-<version>` 分支 PR,
    人工 review 合并，workflow 不自动合并。
+
+macOS 产物不做 Apple 签名/公证（与 googleworkspace/cli 等 CLI 的发行方式
+一致）：经 `brew install` 安装的 formula 下载不携带 quarantine 属性，不会
+触发 Gatekeeper；直接从浏览器下载 archive 手动安装则会被 Gatekeeper 拦截，
+不作为受支持的安装路径。
 
 发布所需的环境与 secrets（均不进入仓库）：
 
 - GitHub environment `release`，配置 required reviewers;
-- `DEVELOPER_ID_APPLICATION_P12` / `DEVELOPER_ID_APPLICATION_P12_PASSWORD`
-  (Developer ID Application 证书导出的 base64 p12 与密码）;
-- `NOTARYTOOL_API_KEY_P8` / `NOTARYTOOL_KEY_ID` / `NOTARYTOOL_ISSUER`
-  (App Store Connect API key);
 - `HOMEBREW_TAP_TOKEN`:fine-grained PAT，对 `feed-mob/homebrew-tap` 有
   contents:write + pull_requests:write，对 `feed-mob/feedmob-cli` 有
   contents:read（供 formula audit 下载私有 asset)。
