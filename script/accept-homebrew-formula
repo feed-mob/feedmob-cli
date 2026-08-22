@@ -1,0 +1,191 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Four-platform Homebrew acceptance for a release Formula PR. Installs the
+# previous Formula from origin/main (when present), upgrades to the PR
+# Formula, and verifies: version match, brew test, command resolution,
+# uninstall behavior, and that credentials survive upgrade and uninstall.
+# Credentials are exercised against a loopback fake Pixel API with a sentinel
+# token, on macOS inside a throwaway keychain — the real login keychain and
+# real tokens are never touched.
+
+require 'fileutils'
+require 'json'
+require 'open3'
+require 'optparse'
+require 'socket'
+require 'tmpdir'
+
+options = { repo: Dir.pwd, tap: 'feed-mob/tap' }
+OptionParser.new do |parser|
+  parser.on('--version VERSION') { |value| options[:version] = value }
+  parser.on('--repo PATH') { |path| options[:repo] = File.expand_path(path) }
+  parser.on('--tap NAME') { |value| options[:tap] = value }
+end.parse!
+
+version = options.fetch(:version)
+abort "Invalid version: #{version}" unless version.match?(/\A\d+\.\d+\.\d+\z/)
+repo = options.fetch(:repo)
+tap = options.fetch(:tap)
+formula_ref = "#{tap}/fm"
+macos = RUBY_PLATFORM.include?('darwin')
+
+def run!(*argv, env: {}, stdin_data: nil)
+  stdout, stderr, status = Open3.capture3(env, *argv, stdin_data:)
+  abort "#{argv.first(3).join(' ')} failed:\n#{stderr}#{stdout}" unless status.success?
+
+  stdout
+end
+
+def run?(*argv, env: {})
+  _stdout, _stderr, status = Open3.capture3(env, *argv)
+  status.success?
+end
+
+brew_prefix = run!('brew', '--prefix').strip
+brew_fm = File.join(brew_prefix, 'bin', 'fm')
+tap_owner, tap_name = options.fetch(:tap).split('/')
+tap_repo = File.join(run!('brew', '--repository').strip, 'Library/Taps', tap_owner, "homebrew-#{tap_name}")
+abort "#{tap_repo} already exists and is not a symlink" if File.directory?(tap_repo) && !File.symlink?(tap_repo)
+FileUtils.mkdir_p File.dirname(tap_repo)
+FileUtils.ln_sf repo, tap_repo
+
+formula_path = File.join(repo, 'Formula/fm.rb')
+pr_formula = File.read(formula_path)
+old_out, _err, show_status = Open3.capture3('git', '-C', repo, 'show', 'origin/main:Formula/fm.rb')
+old_formula = show_status.success? ? old_out : nil
+
+SENTINEL_TOKEN = 'fmpat_acceptance_sentinel_not_a_real_token'
+server = TCPServer.new('127.0.0.1', 0)
+port = server.addr[1]
+Thread.new do
+  loop do
+    socket = server.accept
+    begin
+      request_line = socket.gets.to_s
+      method, path = request_line.split(' ', 3).first(2)
+      authorization = nil
+      while (line = socket.gets) && line != "\r\n"
+        key, value = line.split(': ', 2)
+        authorization = value.to_s.strip if key.to_s.downcase == 'authorization'
+      end
+      authorized = authorization == "Bearer #{SENTINEL_TOKEN}"
+      body, status_line = if !authorized
+                            ['{"error":"unauthorized"}', '401 Unauthorized']
+                          elsif method == 'GET' && path == '/api/v1/cli/me'
+                            ['{"user":{"email":"acceptance@example.invalid"}}', '200 OK']
+                          elsif method == 'DELETE' && path == '/api/v1/cli/token'
+                            ['', '204 No Content']
+                          else
+                            ['{"error":"not_found"}', '404 Not Found']
+                          end
+      socket.write "HTTP/1.1 #{status_line}\r\nContent-Type: application/json\r\nConnection: close\r\n" \
+                   "Content-Length: #{body.bytesize}\r\n\r\n#{body}"
+    ensure
+      socket.close
+    end
+  end
+end
+
+home = Dir.mktmpdir('feedmob-cli-acceptance')
+# On macOS the Security framework locates the default keychain via HOME, so
+# the real HOME must be kept; only the Linux encrypted file store is isolated.
+fm_env = {
+  'HOME' => macos ? Dir.home : home,
+  'XDG_CONFIG_HOME' => File.join(home, 'xdg'),
+  'FEEDMOB_ALLOW_INSECURE_HTTP' => '1',
+  'FEEDMOB_PIXEL_BASE_URL' => "http://127.0.0.1:#{port}",
+  'PATH' => '/usr/bin:/bin'
+}
+
+test_keychain = File.join(Dir.mktmpdir('feedmob-cli-keychain'), 'acceptance.keychain-db')
+original_keychains = []
+if macos
+  original_keychains = run!('security', 'list-keychains', '-d', 'user').lines.map { |line| line.strip.delete('"') }
+  run!('security', 'create-keychain', '-p', '', test_keychain)
+  run!('security', 'list-keychains', '-d', 'user', '-s', test_keychain)
+  run!('security', 'default-keychain', '-d', 'user', '-s', test_keychain)
+end
+
+def assert(description, condition)
+  abort "FAIL: #{description}" unless condition
+
+  puts "ok: #{description}"
+end
+
+fm = lambda do |*args, stdin_data: nil|
+  stdout, stderr, status = Open3.capture3(fm_env, brew_fm, '--json', *args, stdin_data:, unsetenv_others: true)
+  [stdout, stderr, status]
+end
+
+fm_version = lambda do
+  stdout, stderr, status = fm.call('version')
+  abort "fm --json version failed:\n#{stderr}" unless status.success?
+
+  JSON.parse(stdout.lines.last).fetch('data').fetch('version')
+end
+
+credential_present = lambda do
+  if macos
+    run?('security', 'find-generic-password', '-a', 'fm', '-s', 'com.feedmob.fm.pixel', test_keychain)
+  else
+    File.exist?(File.join(home, 'xdg', 'feedmob-cli', 'credentials.enc'))
+  end
+end
+
+begin
+  if old_formula
+    File.write(formula_path, old_formula)
+    run!('brew', 'install', formula_ref)
+    old_version = fm_version.call
+    puts "ok: previous version #{old_version} installed"
+    File.write(formula_path, pr_formula)
+  else
+    run!('brew', 'install', formula_ref)
+    puts 'ok: no Formula on origin/main; installed the PR formula directly'
+  end
+
+  stdout, stderr, status = fm.call('pixel', 'auth', 'login', '--token-stdin', stdin_data: SENTINEL_TOKEN)
+  abort "login failed:\n#{stderr}#{stdout}" unless status.success?
+  assert 'credential stored', credential_present.call
+
+  if old_formula && old_version != version
+    run!('brew', 'upgrade', formula_ref)
+    assert "upgraded to #{version}", fm_version.call == version
+  elsif old_formula
+    puts "ok: origin/main is already at #{old_version}; upgrade step skipped"
+  end
+  assert "fm reports #{version}", fm_version.call == version
+
+  run!('brew', 'test', formula_ref)
+  puts 'ok: brew test passed'
+
+  brew_path_env = { 'PATH' => "#{brew_prefix}/bin:/usr/bin:/bin" }
+  resolved = run!('sh', '-c', 'command -v fm', env: brew_path_env).strip
+  assert 'command -v fm resolves into the Homebrew prefix', resolved == brew_fm
+
+  run!('brew', 'uninstall', 'fm')
+  assert 'command -v fm empty after uninstall', !run?('sh', '-c', 'command -v fm', env: brew_path_env)
+  assert 'credential survives uninstall', credential_present.call
+
+  run!('brew', 'install', formula_ref)
+  stdout, _stderr, status = fm.call('pixel', 'auth', 'status')
+  assert 'credential survives reinstall', status.success? && JSON.parse(stdout.lines.last).dig('data', 'authenticated')
+
+  _stdout, _stderr, status = fm.call('pixel', 'auth', 'logout')
+  assert 'logout removes the credential', status.success? && !credential_present.call
+
+  run!('brew', 'uninstall', 'fm')
+  assert 'final uninstall leaves no fm', !run?('sh', '-c', 'command -v fm', env: brew_path_env)
+ensure
+  File.write(formula_path, pr_formula)
+  if macos
+    run?('security', 'list-keychains', '-d', 'user', '-s', *original_keychains)
+    run?('security', 'default-keychain', '-d', 'user', '-s', File.join(Dir.home, 'Library/Keychains/login.keychain-db'))
+    run?('security', 'delete-keychain', test_keychain)
+  end
+  FileUtils.remove_entry(home)
+  FileUtils.rm_f(tap_repo)
+end
+
+puts "Homebrew acceptance passed for #{version} (#{RUBY_PLATFORM})"

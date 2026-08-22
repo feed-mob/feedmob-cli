@@ -88,3 +88,36 @@ jobs:
           cp "$RUNNER_TEMP/fm.rb" "$(brew --repository feed-mob/formula-check)/Formula/fm.rb"
           brew style feed-mob/formula-check/fm
           brew untap feed-mob/formula-check
+
+  # Real install/upgrade/uninstall acceptance on all four native runners.
+  # Only runs on release Formula PRs, where the Release assets are already
+  # published and the branch name carries the version.
+  formula-acceptance:
+    name: Formula acceptance (${{ matrix.target }})
+    if: startsWith(github.head_ref, 'release/fm-')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macos-arm64
+            runner: macos-15
+          - target: macos-x86_64
+            runner: macos-15-intel
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: linux-x86_64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+      - name: Add Homebrew to PATH on Linux
+        if: runner.os == 'Linux'
+        run: echo "/home/linuxbrew/.linuxbrew/bin" >> "$GITHUB_PATH"
+      - name: Fetch the base branch Formula
+        run: git fetch origin main --quiet
+      - name: Run Homebrew acceptance
+        run: script/accept-homebrew-formula --version "${GITHUB_HEAD_REF#release/fm/}" --repo "$GITHUB_WORKSPACE"
