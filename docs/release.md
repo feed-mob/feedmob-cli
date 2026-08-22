@@ -91,6 +91,13 @@ Publish sequence:
    `release/fm-<version>` PR in this repo. A human reviews and merges it —
    the workflow never merges Formula PRs.
 
+Release Formula PRs additionally run a four-platform acceptance matrix in CI
+(`formula-acceptance`, gated on `release/fm-*` branches): install the previous
+Formula from `main`, upgrade to the PR Formula, `brew test`, uninstall, and
+verify that credentials survive upgrade and uninstall. Credentials are
+exercised against a loopback fake API with a sentinel token — on macOS inside
+a throwaway keychain, on Linux in an isolated HOME.
+
 Everything uses the workflow's own `GITHUB_TOKEN`; the only configuration
 needed is the `release` environment restricted to the `main` branch.
 
