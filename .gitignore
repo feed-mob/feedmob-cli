@@ -4,3 +4,11 @@
 /vendor/bundle/
 /docs/superpowers/
 *.gem
+.env
+.env.*
+.netrc
+*.pem
+*.key
+*.p12
+*.cer
+*.mobileprovision

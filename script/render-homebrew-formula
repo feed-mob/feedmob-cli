@@ -25,24 +25,20 @@ abort "Asset manifest targets must be exactly: #{TARGET_IDS.join(', ')}" unless 
 
 TARGET_IDS.each do |id|
   asset = assets.fetch(id)
-  abort "Invalid #{id} asset ID" unless asset.fetch('asset_id').to_s.match?(/\A\d+\z/)
   abort "Invalid #{id} SHA-256" unless asset.fetch('sha256').match?(/\A[0-9a-f]{64}\z/)
   unless asset.fetch('name').match?(/\Afm-(?:darwin|linux)-(?:arm64|x86_64)\.tar\.gz\z/)
     abort "Invalid #{id} archive name"
   end
 end
-abort 'Asset manifest contains duplicate asset IDs' unless assets.values.map do |asset|
-  asset.fetch('asset_id').to_s
-end.uniq.length == TARGET_IDS.length
 
-def asset_branch(asset)
+def asset_branch(version, asset)
   <<~RUBY.chomp
-    url "https://api.github.com/repos/feed-mob/feedmob-cli/releases/assets/#{asset.fetch('asset_id')}", headers: download_headers
+    url "https://github.com/feed-mob/feedmob-cli/releases/download/v#{version}/#{asset.fetch('name')}"
     sha256 "#{asset.fetch('sha256')}"
   RUBY
 end
 
-branches = TARGET_IDS.to_h { |id| [id, asset_branch(assets.fetch(id)).gsub("\n", "\n      ")] }
+branches = TARGET_IDS.to_h { |id| [id, asset_branch(version, assets.fetch(id)).gsub("\n", "\n      ")] }
 
 formula = <<~RUBY
   class Fm < Formula
@@ -50,15 +46,6 @@ formula = <<~RUBY
     homepage "https://github.com/feed-mob/feedmob-cli"
     version "#{version}"
     license "MIT"
-
-    github_token = ENV["HOMEBREW_GITHUB_API_TOKEN"]
-    if github_token.to_s.empty?
-      odie "HOMEBREW_GITHUB_API_TOKEN must grant read access to feed-mob/feedmob-cli releases."
-    end
-    download_headers = [
-      "Accept: application/octet-stream",
-      "Authorization: Bearer \#{github_token}",
-    ]
 
     on_macos do
       on_arm do
@@ -94,4 +81,4 @@ FileUtils.mkdir_p(File.dirname(output))
 temporary = "#{output}.tmp-#{Process.pid}"
 File.write(temporary, formula)
 FileUtils.mv(temporary, output)
-puts "Rendered private Homebrew Formula: #{output}"
+puts "Rendered Homebrew Formula: #{output}"

@@ -17,12 +17,10 @@ options = {}
 OptionParser.new do |parser|
   parser.on('--version VERSION') { |value| options[:version] = value }
   parser.on('--input PATH') { |path| options[:input] = File.expand_path(path) }
-  parser.on('--manifest-out PATH') { |path| options[:manifest_out] = File.expand_path(path) }
 end.parse!
 
 version = options.fetch(:version)
 input = options.fetch(:input)
-manifest_out = options.fetch(:manifest_out)
 abort "Invalid version: #{version}" unless version.match?(/\A\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?\z/)
 abort 'GH_TOKEN is not set' if ENV['GH_TOKEN'].to_s.empty?
 
@@ -70,13 +68,8 @@ assets.each_value do |asset|
   digest = remote['digest'].to_s
   abort "Missing digest for #{asset.fetch('name')}" if digest.empty?
   abort "Digest mismatch for #{asset.fetch('name')}" unless digest == "sha256:#{asset.fetch('sha256')}"
-  asset['asset_id'] = remote.fetch('id')
 end
-abort 'Duplicate asset IDs in release' unless assets.values.map { |asset| asset['asset_id'] }.uniq.length == 4
 puts 'Read-back verification passed for all assets'
-
-File.write(manifest_out, "#{JSON.pretty_generate(manifest)}\n")
-puts "Wrote asset-ID manifest: #{manifest_out}"
 
 gh!('release', 'edit', tag, '--repo', REPO, '--draft=false')
 puts "Published #{tag}"
