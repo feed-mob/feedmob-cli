@@ -12,6 +12,11 @@ on:
         required: true
         default: false
         type: boolean
+      confirm:
+        description: Type exactly "release" to confirm publishing (required when publish=true).
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -58,6 +63,13 @@ jobs:
         run: |
           ! gh release view "v$RELEASE_VERSION" --repo feed-mob/feedmob-cli
           test -z "$(git ls-remote --tags origin "refs/tags/v$RELEASE_VERSION")"
+      # The org plan has no environment reviewers for private repos, so
+      # publishing requires both publish=true and an explicit confirmation.
+      - name: Require explicit publish confirmation
+        if: inputs.publish
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: test "$CONFIRM" = "release"
       - run: bundle exec rake test
       - run: bundle exec rubocop --format simple
       - run: gem build feedmob-cli.gemspec

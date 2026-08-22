@@ -115,8 +115,10 @@ Release 或修改 Tap。Linux 构建还会通过
 `script/smoke-release-auth` 对打包产物执行 encrypted-file 凭据的
 login/status/logout 端到端验证（loopback fake API + sentinel token）。
 
-`publish=true` 走完整发布，全部写操作都挂在受保护的 `release` environment
-（需要人工批准）之后：
+`publish=true` 走完整发布。写操作 job 声明 `environment: release`（已限制为仅
+`main` 分支可部署，secrets 只对该环境的运行可见）;org 当前套餐不支持私有仓库
+的 environment reviewers，因此发布另要求 `confirm` 输入精确为 `release`，配合
+validate 中仅 publish 时生效的 default-branch / 未发布版本检查作为人工门禁：
 
 1. `publish` job 用 `script/publish-release` 创建 draft Release、上传四个
    archive 与 `SHA256SUMS`、通过 API 回读每个 asset 的 name/size/digest
@@ -132,10 +134,10 @@ macOS 产物不做 Apple 签名/公证（与 googleworkspace/cli 等 CLI 的发�
 
 发布所需的环境与 secrets（均不进入仓库）：
 
-- GitHub environment `release`，配置 required reviewers;
-- `HOMEBREW_TAP_TOKEN`:fine-grained PAT，对 `feed-mob/homebrew-tap` 有
-  contents:write + pull_requests:write，对 `feed-mob/feedmob-cli` 有
-  contents:read（供 formula audit 下载私有 asset)。
+- GitHub environment `release`,deployment branches 限制为 `main`;
+- `HOMEBREW_TAP_TOKEN`（建在 environment 级别）:fine-grained PAT，对
+  `feed-mob/homebrew-tap` 有 contents:write + pull_requests:write，对
+  `feed-mob/feedmob-cli` 有 contents:read（供 formula audit 下载私有 asset)。
 
 正式发布不使用 PKG。
 
