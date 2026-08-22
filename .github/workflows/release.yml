@@ -177,13 +177,7 @@ jobs:
       - name: Draft, verify, and publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: script/publish-release --version ${{ inputs.version }} --input "$RUNNER_TEMP/release-output" --manifest-out "$RUNNER_TEMP/release-assets-with-ids.json"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-assets-with-ids
-          path: ${{ runner.temp }}/release-assets-with-ids.json
-          if-no-files-found: error
-          retention-days: 7
+        run: script/publish-release --version ${{ inputs.version }} --input "$RUNNER_TEMP/release-output"
       - name: Publish summary
         run: 'echo "- published: https://github.com/feed-mob/feedmob-cli/releases/tag/v${{ inputs.version }}" >> "$GITHUB_STEP_SUMMARY"'
 
@@ -202,8 +196,8 @@ jobs:
           ruby-version: .ruby-version
           bundler-cache: true
       # The PAT needs contents:write + pull_requests:write on
-      # feed-mob/homebrew-tap and contents:read on feed-mob/feedmob-cli (the
-      # formula audit downloads the private release assets).
+      # feed-mob/homebrew-tap. Both repos are public, so the formula audit
+      # needs no download credentials.
       - uses: actions/checkout@v4
         with:
           repository: feed-mob/homebrew-tap
@@ -211,13 +205,11 @@ jobs:
           path: homebrew-tap
       - uses: actions/download-artifact@v4
         with:
-          name: release-assets-with-ids
-          path: ${{ runner.temp }}
+          name: feedmob-cli-${{ inputs.version }}-release-assets
+          path: ${{ runner.temp }}/release-output
       - name: Render Formula into the Tap
-        run: feedmob-cli/script/render-homebrew-formula --version ${{ inputs.version }} --assets-json "$RUNNER_TEMP/release-assets-with-ids.json" --output homebrew-tap/Formula/fm.rb
+        run: feedmob-cli/script/render-homebrew-formula --version ${{ inputs.version }} --assets-json "$RUNNER_TEMP/release-output/release-assets.json" --output homebrew-tap/Formula/fm.rb
       - name: Homebrew style and audit
-        env:
-          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
           mkdir -p "$(brew --repository)/Library/Taps/feed-mob"
@@ -235,7 +227,7 @@ jobs:
           git add Formula/fm.rb
           git commit -m "fm ${{ inputs.version }}"
           git push -u origin "codex/fm-${{ inputs.version }}"
-          CHECKSUMS=$(ruby -rjson -e 'JSON.parse(File.read(ARGV[0])).fetch("assets").each_value { |a| puts "#{a.fetch("sha256")}  #{a.fetch("name")}" }' "$RUNNER_TEMP/release-assets-with-ids.json")
+          CHECKSUMS=$(ruby -rjson -e 'JSON.parse(File.read(ARGV[0])).fetch("assets").each_value { |a| puts "#{a.fetch("sha256")}  #{a.fetch("name")}" }' "$RUNNER_TEMP/release-output/release-assets.json")
           gh pr create --repo feed-mob/homebrew-tap \
             --title "fm ${{ inputs.version }}" \
             --body "Release: https://github.com/feed-mob/feedmob-cli/releases/tag/v${{ inputs.version }}

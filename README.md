@@ -93,21 +93,25 @@ script/assemble-homebrew-release \
 输出固定为四个 `fm-{darwin,linux}-{arm64,x86_64}.tar.gz`、`SHA256SUMS` 和
 `release-assets.json`；每个压缩包只包含一个可执行文件 `fm`。
 
-仓库和 Tap 都是私有的。上传 Release assets 后，回读四个 GitHub asset ID 并加入
-`release-assets.json`，再生成放入 `feed-mob/homebrew-tap` 的 `Formula/fm.rb`：
+两个仓库都是公开的。上传 Release assets 后，用 assemble 产物的
+`release-assets.json` 生成放入 `feed-mob/homebrew-tap` 的 `Formula/fm.rb`：
 
 ```sh
 script/render-homebrew-formula \
   --version 0.1.0 \
-  --assets-json /tmp/release-assets-with-ids.json \
+  --assets-json /tmp/release-output/release-assets.json \
   --output /path/to/homebrew-tap/Formula/fm.rb
 ```
 
-Formula 使用 GitHub Release Asset API，并从用户环境读取
-`HOMEBREW_GITHUB_API_TOKEN`；Token 不写入 Formula。它按 OS/CPU 选择对应文件并
-执行 `bin.install "fm"`，Homebrew 负责把命令链接到 PATH。升级或卸载 Formula 都
-不会删除 Keychain 或 Linux 加密凭据；需要彻底清理时，先执行对应服务的
-`fm ... auth logout`。
+Formula 使用公开的 Release 下载 URL，按 OS/CPU 选择对应文件并执行
+`bin.install "fm"`，无需任何 token。用户安装只需：
+
+```sh
+brew install feed-mob/tap/fm
+```
+
+升级或卸载 Formula 都不会删除 Keychain 或 Linux 加密凭据；需要彻底清理时，
+先执行对应服务的 `fm ... auth logout`。
 
 `.github/workflows/release.yml` 由 `workflow_dispatch` 手动触发。`publish=false`
 （默认）是 dry-run：只构建、验证并保留 workflow artifact，绝不创建 GitHub
@@ -123,9 +127,9 @@ validate 中仅 publish 时生效的 default-branch / 未发布版本检查作�
 1. `publish` job 用 `script/publish-release` 创建 draft Release、上传四个
    archive 与 `SHA256SUMS`、通过 API 回读每个 asset 的 name/size/digest
    校验后才取消 draft；任何失败只保留 draft，绝不覆盖已发布版本；
-2. `tap-pr` job 用回读到的 asset ID 渲染 Formula，在 `feed-mob/homebrew-tap`
-   跑 `brew style`/`brew audit --online` 后开 `codex/fm-<version>` 分支 PR,
-   人工 review 合并，workflow 不自动合并。
+2. `tap-pr` job 用 assemble 产物的 manifest 渲染 Formula，在
+   `feed-mob/homebrew-tap` 跑 `brew style`/`brew audit --online` 后开
+   `codex/fm-<version>` 分支 PR,人工 review 合并，workflow 不自动合并。
 
 macOS 产物不做 Apple 签名/公证（与 googleworkspace/cli 等 CLI 的发行方式
 一致）：经 `brew install` 安装的 formula 下载不携带 quarantine 属性，不会
@@ -136,8 +140,7 @@ macOS 产物不做 Apple 签名/公证（与 googleworkspace/cli 等 CLI 的发�
 
 - GitHub environment `release`,deployment branches 限制为 `main`;
 - `HOMEBREW_TAP_TOKEN`（建在 environment 级别）:fine-grained PAT，对
-  `feed-mob/homebrew-tap` 有 contents:write + pull_requests:write，对
-  `feed-mob/feedmob-cli` 有 contents:read（供 formula audit 下载私有 asset)。
+  `feed-mob/homebrew-tap` 有 contents:write + pull_requests:write。
 
 正式发布不使用 PKG。
 

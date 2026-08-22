@@ -119,7 +119,7 @@ class ReleasePackagingTest < Minitest::Test
     _stdout, stderr, status = Open3.capture3(
       { 'GH_TOKEN' => nil },
       RbConfig.ruby, File.join(PROJECT_ROOT, 'script', 'publish-release'),
-      '--version', '0.1.0', '--input', __dir__, '--manifest-out', File::NULL
+      '--version', '0.1.0', '--input', __dir__
     )
 
     refute_predicate status, :success?
@@ -136,8 +136,7 @@ class ReleasePackagingTest < Minitest::Test
       _stdout, stderr, status = Open3.capture3(
         { 'GH_TOKEN' => 'unused' },
         RbConfig.ruby, File.join(PROJECT_ROOT, 'script', 'publish-release'),
-        '--version', '0.1.0', '--input', temporary_directory,
-        '--manifest-out', File.join(temporary_directory, 'out.json')
+        '--version', '0.1.0', '--input', temporary_directory
       )
 
       refute_predicate status, :success?
@@ -169,16 +168,17 @@ class ReleasePackagingTest < Minitest::Test
       assert_equal 2, rendered.scan('on_arm do').length
       assert_equal 2, rendered.scan('on_intel do').length
       formula_manifest.fetch('assets').each_value do |asset|
-        assert_includes rendered, "/releases/assets/#{asset.fetch('asset_id')}"
+        assert_includes rendered, "/releases/download/v0.1.0/#{asset.fetch('name')}"
         assert_includes rendered, asset.fetch('sha256')
       end
+      refute_includes rendered, 'HOMEBREW_GITHUB_API_TOKEN'
     end
   end
 
   def test_formula_renderer_places_each_asset_in_its_os_and_cpu_branch
     with_rendered_formula(formula_manifest) do |rendered, _formula|
       assets = formula_manifest.fetch('assets')
-      url = ->(id) { "/releases/assets/#{assets.fetch(id).fetch('asset_id')}" }
+      url = ->(id) { "/releases/download/v0.1.0/#{assets.fetch(id).fetch('name')}" }
       intel_blocks = rendered.enum_for(:scan, 'on_intel do').map { Regexp.last_match.begin(0) }
 
       assert rendered.index('on_macos do') < rendered.index(url.call('macos-arm64'))
@@ -196,13 +196,6 @@ class ReleasePackagingTest < Minitest::Test
     broken.fetch('assets').delete('linux-arm64')
 
     assert_formula_rejected broken, 'targets must be exactly'
-  end
-
-  def test_formula_renderer_refuses_duplicate_asset_ids
-    broken = formula_manifest
-    broken.dig('assets', 'linux-arm64')['asset_id'] = broken.dig('assets', 'macos-arm64').fetch('asset_id')
-
-    assert_formula_rejected broken, 'duplicate asset IDs'
   end
 
   def test_formula_renderer_refuses_a_version_mismatch
@@ -341,7 +334,7 @@ class ReleasePackagingTest < Minitest::Test
       'version' => '0.1.0',
       'assets' => TARGET_IDS.each_with_index.to_h do |target, index|
         archive = archive_names.fetch(index)
-        [target, { 'name' => archive, 'asset_id' => (index + 1).to_s, 'sha256' => (('a'.ord + index).chr * 64) }]
+        [target, { 'name' => archive, 'sha256' => (('a'.ord + index).chr * 64) }]
       end
     }
   end

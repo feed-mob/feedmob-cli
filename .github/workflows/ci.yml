@@ -68,7 +68,7 @@ jobs:
             targets = %w[macos-arm64 macos-x86_64 linux-arm64 linux-x86_64]
             names = %w[fm-darwin-arm64.tar.gz fm-darwin-x86_64.tar.gz fm-linux-arm64.tar.gz fm-linux-x86_64.tar.gz]
             assets = targets.each_with_index.to_h do |id, index|
-              [id, { "name" => names.fetch(index), "asset_id" => (index + 1).to_s, "sha256" => ((97 + index).chr * 64) }]
+              [id, { "name" => names.fetch(index), "sha256" => ((97 + index).chr * 64) }]
             end
             File.write("formula-manifest.json", JSON.generate({ "version" => "0.1.0", "assets" => assets }))
           '
