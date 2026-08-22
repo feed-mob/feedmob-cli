@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: .ruby-version
@@ -31,10 +33,37 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
           test "$RELEASE_VERSION" = "$(ruby -Ilib -r feedmob/cli/version -e 'print FeedMob::CLI::VERSION')"
-          ruby -e 'abort "Invalid version" unless ENV.fetch("RELEASE_VERSION").match?(/\A\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?\z/)' 
+          ruby -e 'abort "Invalid version" unless ENV.fetch("RELEASE_VERSION").match?(/\A\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?\z/)'
+      - name: Verify source commit is on the default branch
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          case "$RELEASE_VERSION" in
+            *-*)
+              echo "Prerelease $RELEASE_VERSION may build from any commit"
+              ;;
+            *)
+              git fetch origin main
+              git merge-base --is-ancestor HEAD origin/main
+              ;;
+          esac
+      - name: Verify the version was not released before
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          ! gh release view "v$RELEASE_VERSION" --repo feed-mob/feedmob-cli
+          test -z "$(git ls-remote --tags origin "refs/tags/v$RELEASE_VERSION")"
       - run: bundle exec rake test
       - run: bundle exec rubocop --format simple
       - run: gem build feedmob-cli.gemspec
+      - name: Validation summary
+        run: |
+          {
+            echo "- commit: $GITHUB_SHA"
+            echo "- CLI version: ${{ inputs.version }}"
+            ruby -ryaml -e 'c = YAML.load_file("packaging/release.yml").fetch("tebako"); puts "- Tebako release: #{c.fetch("release_version")}, format: #{c.fetch("format_version")}, Ruby: #{c.fetch("ruby_version")}"'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   build:
     name: Build (${{ matrix.target }})
@@ -70,9 +99,17 @@ jobs:
         run: script/smoke-release-auth --artifact "$RUNNER_TEMP/fm"
       - name: Package native release asset
         run: script/package-homebrew-artifact --target ${{ matrix.target }} --artifact "$RUNNER_TEMP/fm" --output "$RUNNER_TEMP/release-assets"
+      - name: Build summary
+        run: |
+          {
+            echo "- target: ${{ matrix.target }} ($(uname -s) $(uname -m))"
+            echo "- archive: $(cat "$RUNNER_TEMP"/release-assets/*.sha256)"
+          } >> "$GITHUB_STEP_SUMMARY"
+      # macOS binaries are not signed in this dry-run workflow; the artifact
+      # name marks them so they can never be mistaken for release assets.
       - uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.target }}
+          name: release-${{ matrix.target }}${{ startsWith(matrix.target, 'macos-') && '-unsigned' || '' }}
           path: ${{ runner.temp }}/release-assets/*
           if-no-files-found: error
           retention-days: 7
