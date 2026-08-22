@@ -26,11 +26,17 @@ brew tap feed-mob/tap https://github.com/feed-mob/feedmob-cli.git
 brew install feed-mob/tap/fm
 ```
 
-Prebuilt binaries ship for macOS arm64/x86_64 and Linux arm64/x86_64
-(GNU/glibc >= 2.35, i.e. Ubuntu 22.04 or newer; Alpine/musl is not
-supported). No Ruby installation is required. On first run the binary
-downloads its ~11 MB runtime image once (SHA-256 verified, cached in
-`~/.tebako/runtimes/`), so the first invocation needs access to github.com.
+Prebuilt binaries ship for macOS arm64/x86_64 and Linux arm64/x86_64:
+
+- macOS 11+ on Apple Silicon, macOS 10.12+ on Intel (built and tested on
+  macOS 15 runners);
+- GNU/glibc >= 2.35 on Linux, i.e. Ubuntu 22.04 or newer; Alpine/musl and
+  Windows are not supported.
+
+No Ruby installation is required. On first run the binary downloads its ~11 MB
+runtime image once (SHA-256 verified, cached in `~/.tebako/runtimes/`), so
+the first invocation needs access to github.com; `TEBAKO_RUNTIME_MIRROR`
+(https or file://) can point at an internal mirror.
 
 Upgrading or uninstalling the formula never touches stored credentials; run
 `fm <service> auth logout` first if you want them removed.
@@ -111,6 +117,23 @@ a stable JSON envelope to stdout, including errors:
 - Requests go only to the configured service host over HTTPS; loopback HTTP
   requires an explicit opt-in;
 - Only GET requests are exposed — no write-API escape hatch.
+
+## Troubleshooting
+
+- **"Could not read/save … macOS Keychain"**: the login keychain is locked
+  (common after a macOS password change). Unlock it with
+  `security unlock-keychain login.keychain-db` or via Keychain Access, then
+  retry.
+- **Gatekeeper blocks a browser-downloaded archive**: the binaries are
+  unsigned by design. Installing through Homebrew is the supported path —
+  formula downloads carry no quarantine attribute, so Gatekeeper is not
+  triggered.
+- **`tebako-bootstrap: WARNING … unsigned v1 (legacy) tpkg trailer` on
+  stderr**: expected with the current Tebako toolchain; it is informational
+  and does not affect JSON stdout or exit codes.
+- **First run fails offline or through a proxy**: the runtime image download
+  needs github.com access once; set `TEBAKO_RUNTIME_MIRROR` to an internal
+  mirror if needed.
 
 ## Development and releasing
 

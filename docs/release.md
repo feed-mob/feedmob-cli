@@ -106,3 +106,11 @@ To publish:
 ```sh
 gh workflow run release.yml --ref main -f bump=patch -f publish=true -f confirm=release
 ```
+
+## Rollback
+
+There are no versioned formulas: each release overwrites `Formula/fm.rb`.
+To roll back a bad Formula, revert the corresponding `release/fm-*` PR —
+earlier states are always recoverable from git history, and users can
+`brew pin fm` to hold their installed version. Published releases and tags
+are never overwritten or deleted; fixes ship as a new version.
