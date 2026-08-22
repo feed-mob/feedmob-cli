@@ -144,6 +144,17 @@ class ReleasePackagingTest < Minitest::Test
     end
   end
 
+  def test_publish_release_rejects_an_invalid_target
+    _stdout, stderr, status = Open3.capture3(
+      { 'GH_TOKEN' => 'unused' },
+      RbConfig.ruby, File.join(PROJECT_ROOT, 'script', 'publish-release'),
+      '--version', '0.1.0', '--input', __dir__, '--target', 'not-a-sha'
+    )
+
+    refute_predicate status, :success?
+    assert_includes stderr, 'Invalid target'
+  end
+
   def test_prepare_release_root_contains_only_runtime_application_files
     Dir.mktmpdir('feedmob-cli-release-root') do |temporary_directory|
       destination = File.join(temporary_directory, 'root')

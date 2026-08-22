@@ -1,12 +1,17 @@
-name: Release dry run
+name: Release
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: Version to build (must match FeedMob::CLI::VERSION)
+      bump:
+        description: Version bump applied to the latest release tag.
         required: true
-        type: string
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
       publish:
         description: Publish the GitHub Release and prepare the Tap PR (requires the protected release environment).
         required: true
@@ -25,6 +30,9 @@ jobs:
   validate:
     name: Validate release inputs
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      previous_tag: ${{ steps.version.outputs.previous_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,33 +41,40 @@ jobs:
         with:
           ruby-version: .ruby-version
           bundler-cache: true
-      - name: Validate requested version
+      - name: Compute the next version from the latest tag
+        id: version
         env:
-          RELEASE_VERSION: ${{ inputs.version }}
+          BUMP: ${{ inputs.bump }}
         run: |
-          test "$RELEASE_VERSION" = "$(ruby -Ilib -r feedmob/cli/version -e 'print FeedMob::CLI::VERSION')"
-          ruby -e 'abort "Invalid version" unless ENV.fetch("RELEASE_VERSION").match?(/\A\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?\z/)'
+          git fetch origin --tags --force --quiet
+          latest=$(git tag --list 'v[0-9]*' --sort=-v:refname | head -1)
+          if [ -z "$latest" ]; then
+            next=$(ruby -Ilib -r feedmob/cli/version -e 'print FeedMob::CLI::VERSION')
+          else
+            next=$(ruby -e '
+              major, minor, patch = ARGV.fetch(0).sub(/\Av/, "").split(".").map(&:to_i)
+              case ARGV.fetch(1)
+              when "major" then major += 1; minor = 0; patch = 0
+              when "minor" then minor += 1; patch = 0
+              else patch += 1
+              end
+              print [major, minor, patch].join(".")
+            ' "$latest" "$BUMP")
+          fi
+          echo "value=$next" >> "$GITHUB_OUTPUT"
+          echo "previous_tag=$latest" >> "$GITHUB_OUTPUT"
       # Publish-only gates: dry runs must be able to build from any branch so
       # release changes can be verified before merging.
       - name: Verify source commit is on the default branch
         if: inputs.publish
-        env:
-          RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          case "$RELEASE_VERSION" in
-            *-*)
-              echo "Prerelease $RELEASE_VERSION may build from any commit"
-              ;;
-            *)
-              git fetch origin main
-              git merge-base --is-ancestor HEAD origin/main
-              ;;
-          esac
+          git fetch origin main --quiet
+          git merge-base --is-ancestor HEAD origin/main
       - name: Verify the version was not released before
         if: inputs.publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
         run: |
           ! gh release view "v$RELEASE_VERSION" --repo feed-mob/feedmob-cli
           test -z "$(git ls-remote --tags origin "refs/tags/v$RELEASE_VERSION")"
@@ -77,13 +92,46 @@ jobs:
         run: |
           {
             echo "- commit: $GITHUB_SHA"
-            echo "- CLI version: ${{ inputs.version }}"
+            echo "- latest tag: ${{ steps.version.outputs.previous_tag }}"
+            echo "- next version: ${{ steps.version.outputs.value }} (${{ inputs.bump }})"
             ruby -ryaml -e 'c = YAML.load_file("packaging/release.yml").fetch("tebako"); puts "- Tebako release: #{c.fetch("release_version")}, format: #{c.fetch("format_version")}, Ruby: #{c.fetch("ruby_version")}"'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  bump:
+    name: Bump the version on main
+    needs: validate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.bump.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Commit the version bump (publish only)
+        id: bump
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          if [ "$PUBLISH" = "true" ]; then
+            git config user.name feedmob-release
+            git config user.email release@feedmob.invalid
+            ruby -e "path = 'lib/feedmob/cli/version.rb'; content = File.read(path); updated = content.sub(/VERSION = '[^']+'/, %{VERSION = '#{ENV.fetch('RELEASE_VERSION')}'}); abort('VERSION assignment not found') if updated == content && !content.include?(ENV.fetch('RELEASE_VERSION')); File.write(path, updated)"
+            git add lib/feedmob/cli/version.rb
+            git diff --cached --quiet || git commit -m "fm $RELEASE_VERSION"
+            git push origin HEAD:main
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Bump summary
+        run: |
+          {
+            echo "- version: ${{ needs.validate.outputs.version }}"
+            echo "- release commit: ${{ steps.bump.outputs.sha }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
     name: Build (${{ matrix.target }})
-    needs: validate
+    needs: [validate, bump]
     strategy:
       fail-fast: false
       matrix:
@@ -100,6 +148,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.sha }}
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: .ruby-version
@@ -130,10 +180,12 @@ jobs:
 
   assemble:
     name: Assemble release assets
-    needs: build
+    needs: [validate, build]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.sha }}
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: .ruby-version
@@ -145,7 +197,7 @@ jobs:
       - run: script/assemble-homebrew-release --input "$RUNNER_TEMP/release-input" --output "$RUNNER_TEMP/release-output"
       - uses: actions/upload-artifact@v4
         with:
-          name: feedmob-cli-${{ inputs.version }}-release-assets
+          name: feedmob-cli-${{ needs.validate.outputs.version }}-release-assets
           path: ${{ runner.temp }}/release-output/*
           if-no-files-found: error
           retention-days: 7
@@ -159,32 +211,34 @@ jobs:
   publish:
     name: Publish GitHub Release
     if: inputs.publish
-    needs: assemble
+    needs: [validate, bump, assemble]
     runs-on: ubuntu-24.04
     environment: release
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.sha }}
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: .ruby-version
           bundler-cache: true
       - uses: actions/download-artifact@v4
         with:
-          name: feedmob-cli-${{ inputs.version }}-release-assets
+          name: feedmob-cli-${{ needs.validate.outputs.version }}-release-assets
           path: ${{ runner.temp }}/release-output
       - name: Draft, verify, and publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: script/publish-release --version ${{ inputs.version }} --input "$RUNNER_TEMP/release-output"
+        run: script/publish-release --version ${{ needs.validate.outputs.version }} --input "$RUNNER_TEMP/release-output" --target ${{ needs.bump.outputs.sha }} --previous-tag "${{ needs.validate.outputs.previous_tag }}"
       - name: Publish summary
-        run: 'echo "- published: https://github.com/feed-mob/feedmob-cli/releases/tag/v${{ inputs.version }}" >> "$GITHUB_STEP_SUMMARY"'
+        run: 'echo "- published: https://github.com/feed-mob/feedmob-cli/releases/tag/v${{ needs.validate.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"'
 
   formula-pr:
     name: Prepare Formula PR
     if: inputs.publish
-    needs: publish
+    needs: [validate, bump, publish]
     runs-on: ubuntu-24.04
     environment: release
     permissions:
@@ -192,16 +246,18 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.sha }}
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: .ruby-version
           bundler-cache: true
       - uses: actions/download-artifact@v4
         with:
-          name: feedmob-cli-${{ inputs.version }}-release-assets
+          name: feedmob-cli-${{ needs.validate.outputs.version }}-release-assets
           path: ${{ runner.temp }}/release-output
       - name: Render the Formula
-        run: script/render-homebrew-formula --version ${{ inputs.version }} --assets-json "$RUNNER_TEMP/release-output/release-assets.json" --output Formula/fm.rb
+        run: script/render-homebrew-formula --version ${{ needs.validate.outputs.version }} --assets-json "$RUNNER_TEMP/release-output/release-assets.json" --output Formula/fm.rb
       # brew style/audit require the formula inside a tap; symlink this repo
       # as the feed-mob/tap tap. Downloads are public, no token needed.
       - name: Homebrew style and audit
@@ -217,14 +273,14 @@ jobs:
         run: |
           git config user.name feedmob-release
           git config user.email release@feedmob.invalid
-          git switch -c "release/fm-${{ inputs.version }}"
+          git switch -c "release/fm-${{ needs.validate.outputs.version }}"
           git add Formula/fm.rb
-          git commit -m "fm ${{ inputs.version }}"
-          git push -u origin "release/fm-${{ inputs.version }}"
+          git commit -m "fm ${{ needs.validate.outputs.version }}"
+          git push -u origin "release/fm-${{ needs.validate.outputs.version }}"
           CHECKSUMS=$(ruby -rjson -e 'JSON.parse(File.read(ARGV[0])).fetch("assets").each_value { |a| puts "#{a.fetch("sha256")}  #{a.fetch("name")}" }' "$RUNNER_TEMP/release-output/release-assets.json")
           gh pr create \
-            --title "fm ${{ inputs.version }}" \
-            --body "Release: https://github.com/feed-mob/feedmob-cli/releases/tag/v${{ inputs.version }}
+            --title "fm ${{ needs.validate.outputs.version }}" \
+            --body "Release: https://github.com/feed-mob/feedmob-cli/releases/tag/v${{ needs.validate.outputs.version }}
 
           Built and verified by ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} (four native targets, real Tebako press, Linux credential smoke).
 
@@ -234,4 +290,4 @@ jobs:
 
           Manual review required; the release workflow never merges Formula PRs."
       - name: Formula PR summary
-        run: echo "- Formula PR opened from branch release/fm-${{ inputs.version }}; review and merge manually" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "- Formula PR opened from branch release/fm-${{ needs.validate.outputs.version }}; review and merge manually" >> "$GITHUB_STEP_SUMMARY"

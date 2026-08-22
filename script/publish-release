@@ -17,11 +17,15 @@ options = {}
 OptionParser.new do |parser|
   parser.on('--version VERSION') { |value| options[:version] = value }
   parser.on('--input PATH') { |path| options[:input] = File.expand_path(path) }
+  parser.on('--target SHA') { |value| options[:target] = value }
+  parser.on('--previous-tag TAG') { |value| options[:previous_tag] = value }
 end.parse!
 
 version = options.fetch(:version)
 input = options.fetch(:input)
 abort "Invalid version: #{version}" unless version.match?(/\A\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?\z/)
+target = options[:target]
+abort "Invalid target: #{target}" if target && !target.match?(/\A[0-9a-f]{40}\z/)
 abort 'GH_TOKEN is not set' if ENV['GH_TOKEN'].to_s.empty?
 
 manifest_path = File.join(input, 'release-assets.json')
@@ -46,11 +50,17 @@ tag = "v#{version}"
 _view, _err, view_status = Open3.capture3('gh', 'release', 'view', tag, '--repo', REPO)
 abort "#{tag} already exists; never overwrite a release" if view_status.success?
 
-notes = ["fm #{version}", '', '```', File.read(sums_path).strip, '```'].join("\n")
-gh!(
-  'release', 'create', tag, '--repo', REPO, '--draft',
-  '--title', "fm #{version}", '--notes', notes, *uploads
-)
+# Auto-generated "What's Changed" notes like cli/cli releases, with the
+# checksums appended.
+generate_args = ['-X', 'POST', "repos/#{REPO}/releases/generate-notes", '-f', "tag_name=#{tag}"]
+previous_tag = options[:previous_tag].to_s
+generate_args += ['-f', "previous_tag_name=#{previous_tag}"] unless previous_tag.empty?
+generated = JSON.parse(gh!('api', *generate_args))
+notes = [generated.fetch('body'), '', '## Checksums', '', '```', File.read(sums_path).strip, '```'].join("\n")
+
+create_args = ['release', 'create', tag, '--repo', REPO, '--draft', '--title', "fm #{version}", '--notes', notes]
+create_args += ['--target', target] if target
+gh!(*create_args, *uploads)
 puts "Created draft release #{tag}"
 
 # releases/tags/<tag> 404s for drafts (no git tag exists until publish), so
