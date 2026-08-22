@@ -22,7 +22,7 @@ module ReleaseTestHelpers
         'tebako_url' => "https://example.com/tebako-#{id}",
         'tebako_sha256' => format('%02x', TARGET_IDS.index(id)) * 32
       }
-      target['glibc_max'] = '2.35' if os == 'linux'
+      target['glibc_max'] = '2.39' if os == 'linux'
       [id, target]
     end
     config = {

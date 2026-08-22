@@ -93,6 +93,8 @@ uname -m
 
 第一版先声明 Linux GNU/glibc 支持，建议基线为 Ubuntu 22.04 或兼容发行版。实际最低 glibc 版本必须由生成产物的 version requirement 扫描结果决定，不能只根据 runner 名称推断。
 
+**实施记录（2026-08-22）：** 首次 dry-run 实测 Tebako 0.1.0 官方 Linux 工具（arm64 与 x86_64）要求 `GLIBC_2.36/2.38/2.39`，无法在 Ubuntu 22.04（glibc 2.35）上运行。基线因此确定为 Ubuntu 24.04 / `glibc_max = 2.39`，Linux runner 使用 `ubuntu-24.04` 与 `ubuntu-24.04-arm`。
+
 门禁规则：
 
 - 顶层文件必须以 ELF magic 开头。

@@ -19,13 +19,13 @@ tebako:
       os: linux
       architecture: arm64
       archive: fm-linux-arm64.tar.gz
-      glibc_max: "2.35"
+      glibc_max: "2.39"
       tebako_url: https://github.com/tamatebako/tebako/releases/download/v0.1.0/tebako-0.1.0-linux-gnu-arm64
       tebako_sha256: "efcedda40608b9456e50289cc3626b957869058996f22aa2f2a6d11c4608ed9b"
     linux-x86_64:
       os: linux
       architecture: x86_64
       archive: fm-linux-x86_64.tar.gz
-      glibc_max: "2.35"
+      glibc_max: "2.39"
       tebako_url: https://github.com/tamatebako/tebako/releases/download/v0.1.0/tebako-0.1.0-linux-gnu-x86_64
       tebako_sha256: "8f442f52bdd8b0085870a71254955f33d9eb8cd4814f0909483db03546937412"

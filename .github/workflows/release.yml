@@ -19,7 +19,7 @@ permissions:
 jobs:
   validate:
     name: Validate release inputs
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,9 +77,9 @@ jobs:
           - target: macos-x86_64
             runner: macos-15-intel
           - target: linux-arm64
-            runner: ubuntu-22.04-arm
+            runner: ubuntu-24.04-arm
           - target: linux-x86_64
-            runner: ubuntu-22.04
+            runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
@@ -117,7 +117,7 @@ jobs:
   assemble:
     name: Assemble release assets
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
