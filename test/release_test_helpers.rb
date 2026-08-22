@@ -72,12 +72,12 @@ module ReleaseTestHelpers
     source = File.join(temporary_directory, 'fake_fm.c')
     File.write(
       source,
-      <<~'C'
+      <<~C
         #include <stdio.h>
         #include <string.h>
         int main(int argc, char **argv) {
           if (argc == 3 && strcmp(argv[1], "--json") == 0 && strcmp(argv[2], "version") == 0) {
-            puts("{\"ok\":true,\"data\":{\"version\":\"0.1.0\"}}");
+            puts("{\\"ok\\":true,\\"data\\":{\\"version\\":\\"#{FeedMob::CLI::VERSION}\\"}}");
             return 0;
           }
           return 2;

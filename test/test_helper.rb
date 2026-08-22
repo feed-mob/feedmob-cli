@@ -6,3 +6,5 @@ require 'open3'
 require 'stringio'
 
 $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
+
+require 'feedmob/cli/version'
