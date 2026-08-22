@@ -74,8 +74,8 @@ jobs:
           '
           script/render-homebrew-formula --version 0.1.0 --assets-json formula-manifest.json --output "$RUNNER_TEMP/fm.rb"
       - run: ruby -c "$RUNNER_TEMP/fm.rb"
-      # Audit needs network access to the private release assets, so it only
-      # runs in the release workflow; CI covers syntax and Homebrew style.
+      # Audit needs network access to the release assets, so it only runs in
+      # the release workflow; CI covers syntax and Homebrew style.
       # brew style requires the formula to live in a tap.
       - name: Set up Homebrew on Linux
         if: runner.os == 'Linux'

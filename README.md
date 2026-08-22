@@ -16,8 +16,6 @@ fm [--json] time-off auth logout
 fm [--json] time-off request get <path>
 ```
 
-Admin 暂未纳入 CLI。
-
 ## 安装
 
 开发和当前的本地安装方式需要 Ruby 3.2 或更高版本。项目的 `.ruby-version`
@@ -120,9 +118,9 @@ Release 或修改 Tap。Linux 构建还会通过
 login/status/logout 端到端验证（loopback fake API + sentinel token）。
 
 `publish=true` 走完整发布。写操作 job 声明 `environment: release`（已限制为仅
-`main` 分支可部署，secrets 只对该环境的运行可见）;org 当前套餐不支持私有仓库
-的 environment reviewers，因此发布另要求 `confirm` 输入精确为 `release`，配合
-validate 中仅 publish 时生效的 default-branch / 未发布版本检查作为人工门禁：
+`main` 分支可部署，secrets 只对该环境的运行可见），发布另要求 `confirm` 输入
+精确为 `release`，配合 validate 中仅 publish 时生效的 default-branch /
+未发布版本检查作为人工门禁：
 
 1. `publish` job 用 `script/publish-release` 创建 draft Release、上传四个
    archive 与 `SHA256SUMS`、通过 API 回读每个 asset 的 name/size/digest
