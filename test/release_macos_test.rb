@@ -23,7 +23,7 @@ class ReleaseMacosTest < Minitest::Test
       assert_predicate status, :success?, "#{stdout}\n#{stderr}"
       assert_includes stdout, "Top-level target: #{host_target_id}"
       assert_includes stdout, 'Runtime provenance: ruby@4.0.1;tebako=0.16.4;'
-      assert_includes stdout, 'Version smoke: 0.1.0'
+      assert_includes stdout, "Version smoke: #{FeedMob::CLI::VERSION}"
     end
   end
 

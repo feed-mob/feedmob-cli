@@ -247,7 +247,7 @@ class ReleasePackagingTest < Minitest::Test
       assert_equal expected_files, Dir.children(output).sort
       manifest = JSON.parse(File.read(File.join(output, 'release-assets.json')))
       assert_equal TARGET_IDS.sort, manifest.fetch('assets').keys.sort
-      assert_equal '0.1.0', manifest.fetch('version')
+      assert_equal FeedMob::CLI::VERSION, manifest.fetch('version')
 
       sums = File.read(File.join(output, 'SHA256SUMS'))
       assert_equal sums.lines.sort.join, sums

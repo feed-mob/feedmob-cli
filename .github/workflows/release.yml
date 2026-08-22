@@ -107,6 +107,9 @@ jobs:
       sha: ${{ steps.bump.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
       - name: Commit the version bump (publish only)
         id: bump
         env:
@@ -117,7 +120,10 @@ jobs:
             git config user.name feedmob-release
             git config user.email release@feedmob.invalid
             ruby -e "path = 'lib/feedmob/cli/version.rb'; content = File.read(path); updated = content.sub(/VERSION = '[^']+'/, %{VERSION = '#{ENV.fetch('RELEASE_VERSION')}'}); abort('VERSION assignment not found') if updated == content && !content.include?(ENV.fetch('RELEASE_VERSION')); File.write(path, updated)"
-            git add lib/feedmob/cli/version.rb
+            # The lockfile records the path gem version; a stale lockfile
+            # breaks frozen bundle installs in every downstream job.
+            bundle lock
+            git add lib/feedmob/cli/version.rb Gemfile.lock
             git diff --cached --quiet || git commit -m "fm $RELEASE_VERSION"
             git push origin HEAD:main
           fi

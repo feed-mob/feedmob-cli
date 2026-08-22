@@ -39,7 +39,7 @@ class InstalledCliTest < Minitest::Test
 
         assert_predicate status, :success?, stderr
         assert_equal File.join(prefix, 'bin', 'fm'), stdout.lines.first.strip
-        assert_equal({ 'ok' => true, 'data' => { 'version' => '0.1.0' } }, JSON.parse(stdout.lines.last))
+        assert_equal({ 'ok' => true, 'data' => { 'version' => FeedMob::CLI::VERSION } }, JSON.parse(stdout.lines.last))
       end
     end
   end
