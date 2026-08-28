@@ -24,4 +24,12 @@ class CiWorkflowTest < Minitest::Test
     assert_includes workflow, 'Reusing unreleased source version $next.'
     assert_includes workflow, 'Source version must not be older than the latest release.'
   end
+
+  def test_formula_acceptance_extracts_the_version_from_a_release_formula_branch
+    workflow_path = File.expand_path('../.github/workflows/ci.yml', __dir__)
+    workflow = File.read(workflow_path)
+
+    assert_includes workflow, "startsWith(github.head_ref, 'release/fm-')"
+    assert_includes workflow, '${GITHUB_HEAD_REF#release/fm-}'
+  end
 end
