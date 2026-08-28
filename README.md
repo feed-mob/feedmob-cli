@@ -1,7 +1,7 @@
 # FeedMob CLI (`fm`)
 
 `fm` is the command-line interface for FeedMob services. It manages isolated
-credentials for Pixel and Time Off, verifies identity, and issues read-only
+credentials for Pixel, Time Off, and Femini, verifies authentication, and issues read-only
 API requests — with stable JSON output designed for scripts and automation.
 
 ```text
@@ -15,6 +15,10 @@ fm time-off auth login [--token-stdin]
 fm time-off auth status
 fm time-off auth logout
 fm time-off request get <path>
+fm femini auth login [--token-stdin]
+fm femini auth status
+fm femini auth logout
+fm femini request get <path>
 ```
 
 ## Installation
@@ -64,6 +68,7 @@ Each service keeps its own credential, resolved in this order:
 | --- | --- | --- | --- | --- |
 | Pixel | `FEEDMOB_PIXEL_TOKEN` | `https://feedmob-pixel-dashboard.feedmob.com/rails` | `GET /api/v1/cli/me` | Revokes remotely, deletes local store |
 | Time Off | `FEEDMOB_TIME_OFF_TOKEN` | `https://time-off.feedmob.com` | `GET /api/v1/me` | Deletes local store only |
+| Femini | `FEEDMOB_FEMINI_TOKEN` | `https://assistant.feedmob.ai` | `GET /clients.json?name_cont=__feedmob_cli_auth_probe__` | Deletes local store only |
 
 ```sh
 # Interactive, hidden input; the token never appears in argv or history
@@ -75,7 +80,7 @@ printf '%s' "$FEEDMOB_PIXEL_TOKEN" | fm pixel auth login --token-stdin
 ```
 
 Endpoints can be overridden with `FEEDMOB_PIXEL_BASE_URL` and
-`FEEDMOB_TIME_OFF_BASE_URL`. Overrides must use HTTPS; plain HTTP is only
+`FEEDMOB_TIME_OFF_BASE_URL`, and `FEEDMOB_FEMINI_BASE_URL`. Overrides must use HTTPS; plain HTTP is only
 accepted for loopback addresses (`localhost`, `127.0.0.1`, `::1`) together
 with an explicit `FEEDMOB_ALLOW_INSECURE_HTTP=1` — never set that variable
 in shared or production environments.
@@ -93,6 +98,12 @@ fm pixel request get /api/v1/cli/me
 `request get` only accepts relative paths starting with a single `/`;
 absolute URLs and `//host` paths are rejected so tokens can never leak to an
 unconfigured host. Only GET requests are exposed.
+
+Femini uses the documented Bearer Token authentication: obtain the token from
+the Profile menu in Femini, then run `fm femini auth login`. Femini does not
+document a dedicated identity endpoint, so login/status use a filtered,
+read-only clients request as an authentication probe and never print its
+response. Femini API tokens have no documented prefix requirement.
 
 ### JSON output
 

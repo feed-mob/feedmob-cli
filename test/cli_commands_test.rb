@@ -136,6 +136,53 @@ class CliCommandsTest < Minitest::Test
     assert_equal 'env', JSON.parse(stdout).dig('data', 'source')
   end
 
+  def test_femini_status_uses_a_read_only_authentication_probe_without_returning_business_data
+    credentials = FakeCredentials.new(
+      credential: FeedMob::CLI::Credential.new(value: 'femini-bearer-token', source: 'keychain')
+    )
+    femini_client = FakeClient.new(
+      [FeedMob::CLI::HTTP::Response.new(
+        status: 200, headers: {}, data: { 'data' => [{ 'name' => 'Hidden' }] }
+      )]
+    )
+    use_runtime(
+      credentials:,
+      clients: { 'pixel' => FakeClient.new, 'time-off' => FakeClient.new, 'femini' => femini_client }
+    )
+
+    stdout, = run_cli('femini', 'auth', 'status', '--json')
+
+    assert_equal(
+      { method: :get, path: '/clients.json?name_cont=__feedmob_cli_auth_probe__', token: 'femini-bearer-token' },
+      femini_client.requests.fetch(0)
+    )
+    assert_equal(
+      { 'service' => 'femini', 'authenticated' => true, 'source' => 'keychain' },
+      JSON.parse(stdout).fetch('data')
+    )
+  end
+
+  def test_femini_request_get_uses_the_femini_credential
+    credentials = FakeCredentials.new(
+      credential: FeedMob::CLI::Credential.new(value: 'femini-bearer-token', source: 'keychain')
+    )
+    femini_client = FakeClient.new(
+      [FeedMob::CLI::HTTP::Response.new(status: 200, headers: {}, data: { 'series' => [] })]
+    )
+    use_runtime(
+      credentials:,
+      clients: { 'pixel' => FakeClient.new, 'time-off' => FakeClient.new, 'femini' => femini_client }
+    )
+
+    stdout, = run_cli('femini', 'request', 'get', '/daily_metrics.json', '--json')
+
+    assert_equal(
+      { method: :get, path: '/daily_metrics.json', token: 'femini-bearer-token' },
+      femini_client.requests.fetch(0)
+    )
+    assert_equal({ 'series' => [] }, JSON.parse(stdout).dig('data', 'response'))
+  end
+
   def test_pixel_logout_revokes_the_remote_token_then_deletes_local_keychain_value
     credentials = FakeCredentials.new
     pixel_client = FakeClient.new(

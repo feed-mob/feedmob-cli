@@ -17,31 +17,31 @@ module FeedMob
           source = runtime.credentials.storage_source
 
           output.success(
-            {
+            authentication_payload(
               service: service.name,
               authenticated: true,
               source:,
-              identity: response.data
-            },
+              response:
+            ),
             message: "Authenticated with #{service.label}; credential saved in #{runtime.credentials.storage_label}."
           )
         end
       end
 
       class AuthStatus < Base
-        desc 'Show the authenticated identity for a service'
+        desc 'Check an authenticated service credential'
 
         def call(**)
           credential = credential!(service)
           response = runtime.client(service).request(method: :get, path: service.identity_path, token: credential.value)
 
           output.success(
-            {
+            authentication_payload(
               service: service.name,
               authenticated: true,
               source: credential.source,
-              identity: response.data
-            },
+              response:
+            ),
             message: "Authenticated with #{service.label} using #{credential.source}."
           )
         end
@@ -138,6 +138,24 @@ module FeedMob
         desc 'Remove the local Time Off credential'
 
         def service_name = 'time-off'
+      end
+
+      class FeminiAuthLogin < AuthLogin
+        desc 'Verify and securely save a Femini bearer token'
+
+        def service_name = 'femini'
+      end
+
+      class FeminiAuthStatus < AuthStatus
+        desc 'Check the configured Femini bearer token'
+
+        def service_name = 'femini'
+      end
+
+      class FeminiAuthLogout < AuthLogout
+        desc 'Remove the local Femini bearer token'
+
+        def service_name = 'femini'
       end
     end
   end

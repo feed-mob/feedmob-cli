@@ -22,12 +22,13 @@ module FeedMob
           return missing(service) if credential.source == 'missing'
 
           response = runtime.client(service).request(method: :get, path: service.identity_path, token: credential.value)
-          {
+          payload = {
             service: service.name,
             authenticated: true,
-            credential_source: credential.source,
-            identity: response.data
+            credential_source: credential.source
           }
+          payload[:identity] = response.data if service.identity_response
+          payload
         rescue Error => e
           {
             service: service.name,

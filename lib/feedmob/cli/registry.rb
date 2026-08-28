@@ -33,6 +33,16 @@ module FeedMob
           request.register 'get', TimeOffRequestGet
         end
       end
+      register 'femini' do |femini|
+        femini.register 'auth' do |auth|
+          auth.register 'login', FeminiAuthLogin
+          auth.register 'status', FeminiAuthStatus
+          auth.register 'logout', FeminiAuthLogout
+        end
+        femini.register 'request' do |request|
+          request.register 'get', FeminiRequestGet
+        end
+      end
     end
   end
 end
