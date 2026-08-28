@@ -153,6 +153,7 @@ begin
   if old_formula
     old_version = fm_version.call
     puts "ok: previous version #{old_version} installed"
+    puts "ok: installed keg #{run!('brew', 'list', '--versions', 'fm').strip}"
     FileUtils.rm_f(tap_repo)
     FileUtils.ln_sf(repo, tap_repo)
     formula_info = JSON.parse(run!('brew', 'info', '--json=v2', formula_ref))
@@ -167,7 +168,11 @@ begin
   assert 'credential stored', credential_present.call
 
   if old_formula && old_version != version
-    run!('brew', 'upgrade', formula_ref)
+    outdated_stdout, outdated_stderr, outdated_status = Open3.capture3('brew', 'outdated', '--verbose', formula_ref)
+    puts "ok: brew outdated status #{outdated_status.exitstatus}: #{outdated_stderr}#{outdated_stdout}".strip
+    upgrade_output = run!('brew', 'upgrade', formula_ref)
+    puts "ok: brew upgrade output: #{upgrade_output}".strip
+    puts "ok: installed keg #{run!('brew', 'list', '--versions', 'fm').strip}"
     upgraded_version = fm_version.call
     assert "upgraded to #{version} (got #{upgraded_version})", upgraded_version == version
   elsif old_formula
