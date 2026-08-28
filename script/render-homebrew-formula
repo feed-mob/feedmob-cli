@@ -45,6 +45,7 @@ formula = <<~RUBY
     desc "Command-line interface for FeedMob services"
     homepage "https://github.com/feed-mob/feedmob-cli"
     license "MIT"
+    version "#{version}"
 
     on_macos do
       on_arm do

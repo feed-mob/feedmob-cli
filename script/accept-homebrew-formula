@@ -172,8 +172,13 @@ begin
   stdout, _stderr, status = fm.call('pixel', 'auth', 'status')
   assert 'credential survives reinstall', status.success? && JSON.parse(stdout.lines.last).dig('data', 'authenticated')
 
-  _stdout, _stderr, status = fm.call('pixel', 'auth', 'logout')
-  assert 'logout removes the credential', status.success? && !credential_present.call
+  stdout, _stderr, status = fm.call('pixel', 'auth', 'logout')
+  logout = JSON.parse(stdout.lines.last)
+  status_stdout, _status_stderr, status_result = fm.call('pixel', 'auth', 'status')
+  credential_status = JSON.parse(status_stdout.lines.last)
+  logout_removed = status.success? && logout.dig('data', 'local_removed') == true
+  credential_missing = !status_result.success? && credential_status.dig('error', 'code') == 'credential_missing'
+  assert 'logout removes the credential', logout_removed && credential_missing
 
   run!('brew', 'uninstall', 'fm')
   assert 'final uninstall leaves no fm', !run?('sh', '-c', 'command -v fm', env: brew_path_env)
