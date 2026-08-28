@@ -32,4 +32,12 @@ class CiWorkflowTest < Minitest::Test
     assert_includes workflow, "startsWith(github.head_ref, 'release/fm-')"
     assert_includes workflow, '${GITHUB_HEAD_REF#release/fm-}'
   end
+
+  def test_formula_acceptance_checks_that_logout_removes_the_credential
+    script_path = File.expand_path('../script/accept-homebrew-formula', __dir__)
+    script = File.read(script_path)
+
+    assert_includes script, "fm.call('pixel', 'auth', 'status')"
+    assert_includes script, "credential_status.dig('error', 'code') == 'credential_missing'"
+  end
 end
