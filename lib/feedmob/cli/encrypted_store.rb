@@ -47,7 +47,11 @@ module FeedMob
           values = load_credentials
           return false unless values.delete(service.name)
 
-          atomic_write(credentials_path, encrypt(JSON.generate(values)))
+          if values.empty?
+            File.delete(credentials_path)
+          else
+            atomic_write(credentials_path, encrypt(JSON.generate(values)))
+          end
           true
         end
       end

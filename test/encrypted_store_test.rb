@@ -63,6 +63,13 @@ class EncryptedStoreTest < Minitest::Test
     refute @store.delete(@pixel)
   end
 
+  def test_delete_removes_the_credentials_file_when_the_last_value_is_removed
+    @store.write(@pixel, 'fmpat_secret_value')
+
+    assert @store.delete(@pixel)
+    refute_path_exists File.join(@directory, 'credentials.enc')
+  end
+
   def test_rejects_tampered_ciphertext
     @store.write(@pixel, 'fmpat_secret_value')
     path = File.join(@directory, 'credentials.enc')
