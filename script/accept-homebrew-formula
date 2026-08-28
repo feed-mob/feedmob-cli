@@ -30,6 +30,10 @@ tap = options.fetch(:tap)
 formula_ref = "#{tap}/fm"
 macos = RUBY_PLATFORM.include?('darwin')
 
+# The acceptance test controls the tap Formula contents directly. An implicit
+# update can replace that fixture while install/upgrade is in progress.
+ENV['HOMEBREW_NO_AUTO_UPDATE'] = '1'
+
 def run!(*argv, env: {}, stdin_data: nil)
   stdout, stderr, status = Open3.capture3(env, *argv, stdin_data:)
   abort "#{argv.first(3).join(' ')} failed:\n#{stderr}#{stdout}" unless status.success?
@@ -151,7 +155,8 @@ begin
 
   if old_formula && old_version != version
     run!('brew', 'upgrade', formula_ref)
-    assert "upgraded to #{version}", fm_version.call == version
+    upgraded_version = fm_version.call
+    assert "upgraded to #{version} (got #{upgraded_version})", upgraded_version == version
   elsif old_formula
     puts "ok: origin/main is already at #{old_version}; upgrade step skipped"
   end
