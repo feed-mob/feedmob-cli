@@ -120,4 +120,4 @@ jobs:
       - name: Fetch the base branch Formula
         run: git fetch origin main --quiet
       - name: Run Homebrew acceptance
-        run: script/accept-homebrew-formula --version "${GITHUB_HEAD_REF#release/fm/}" --repo "$GITHUB_WORKSPACE"
+        run: script/accept-homebrew-formula --version "${GITHUB_HEAD_REF#release/fm-}" --repo "$GITHUB_WORKSPACE"
