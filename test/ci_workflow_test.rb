@@ -40,5 +40,6 @@ class CiWorkflowTest < Minitest::Test
     assert_includes script, "fm.call('pixel', 'auth', 'status')"
     assert_includes script, "credential_status.dig('error', 'code') == 'credential_missing'"
     assert_includes script, "ENV['HOMEBREW_NO_AUTO_UPDATE'] = '1'"
+    assert_includes script, "ENV['HOMEBREW_NO_INSTALL_FROM_API'] = '1'"
   end
 end
