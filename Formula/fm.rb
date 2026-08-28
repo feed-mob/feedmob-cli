@@ -1,6 +1,7 @@
 class Fm < Formula
   desc "Command-line interface for FeedMob services"
   homepage "https://github.com/feed-mob/feedmob-cli"
+  version "0.2.0"
   license "MIT"
 
   on_macos do
