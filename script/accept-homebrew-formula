@@ -30,6 +30,10 @@ tap = options.fetch(:tap)
 formula_ref = "#{tap}/fm"
 macos = RUBY_PLATFORM.include?('darwin')
 
+# The acceptance test controls the tap Formula contents directly. An implicit
+# update can replace that fixture while install/upgrade is in progress.
+ENV['HOMEBREW_NO_AUTO_UPDATE'] = '1'
+
 def run!(*argv, env: {}, stdin_data: nil)
   stdout, stderr, status = Open3.capture3(env, *argv, stdin_data:)
   abort "#{argv.first(3).join(' ')} failed:\n#{stderr}#{stdout}" unless status.success?
@@ -48,12 +52,23 @@ tap_owner, tap_name = options.fetch(:tap).split('/')
 tap_repo = File.join(run!('brew', '--repository').strip, 'Library/Taps', tap_owner, "homebrew-#{tap_name}")
 abort "#{tap_repo} already exists and is not a symlink" if File.directory?(tap_repo) && !File.symlink?(tap_repo)
 FileUtils.mkdir_p File.dirname(tap_repo)
-FileUtils.ln_sf repo, tap_repo
 
-formula_path = File.join(repo, 'Formula/fm.rb')
-pr_formula = File.read(formula_path)
 old_out, _err, show_status = Open3.capture3('git', '-C', repo, 'show', 'origin/main:Formula/fm.rb')
 old_formula = show_status.success? ? old_out : nil
+old_tap_repo = nil
+tap_source = repo
+if old_formula
+  old_tap_repo = Dir.mktmpdir('feedmob-cli-old-tap')
+  old_formula_path = File.join(old_tap_repo, 'Formula', 'fm.rb')
+  FileUtils.mkdir_p(File.dirname(old_formula_path))
+  File.write(old_formula_path, old_formula)
+  run!('git', '-C', old_tap_repo, 'init', '--quiet')
+  run!('git', '-C', old_tap_repo, 'add', 'Formula/fm.rb')
+  run!('git', '-C', old_tap_repo, '-c', 'user.name=feedmob-ci', '-c', 'user.email=ci@feedmob.invalid',
+       'commit', '--quiet', '-m', 'Previous Formula')
+  tap_source = old_tap_repo
+end
+FileUtils.ln_sf tap_source, tap_repo
 
 SENTINEL_TOKEN = 'fmpat_acceptance_sentinel_not_a_real_token'
 server = TCPServer.new('127.0.0.1', 0)
@@ -134,14 +149,17 @@ credential_present = lambda do
 end
 
 begin
+  run!('brew', 'install', formula_ref)
   if old_formula
-    File.write(formula_path, old_formula)
-    run!('brew', 'install', formula_ref)
     old_version = fm_version.call
     puts "ok: previous version #{old_version} installed"
-    File.write(formula_path, pr_formula)
+    puts "ok: installed keg #{run!('brew', 'list', '--versions', 'fm').strip}"
+    FileUtils.rm_f(tap_repo)
+    FileUtils.ln_sf(repo, tap_repo)
+    formula_info = JSON.parse(run!('brew', 'info', '--json=v2', formula_ref))
+    candidate_version = formula_info.fetch('formulae').fetch(0).dig('versions', 'stable')
+    assert "candidate Formula is #{version} (got #{candidate_version})", candidate_version == version
   else
-    run!('brew', 'install', formula_ref)
     puts 'ok: no Formula on origin/main; installed the PR formula directly'
   end
 
@@ -150,8 +168,13 @@ begin
   assert 'credential stored', credential_present.call
 
   if old_formula && old_version != version
-    run!('brew', 'upgrade', formula_ref)
-    assert "upgraded to #{version}", fm_version.call == version
+    outdated_stdout, outdated_stderr, outdated_status = Open3.capture3('brew', 'outdated', '--verbose', formula_ref)
+    puts "ok: brew outdated status #{outdated_status.exitstatus}: #{outdated_stderr}#{outdated_stdout}".strip
+    upgrade_output = run!('brew', 'upgrade', formula_ref)
+    puts "ok: brew upgrade output: #{upgrade_output}".strip
+    puts "ok: installed keg #{run!('brew', 'list', '--versions', 'fm').strip}"
+    upgraded_version = fm_version.call
+    assert "upgraded to #{version} (got #{upgraded_version})", upgraded_version == version
   elsif old_formula
     puts "ok: origin/main is already at #{old_version}; upgrade step skipped"
   end
@@ -172,13 +195,17 @@ begin
   stdout, _stderr, status = fm.call('pixel', 'auth', 'status')
   assert 'credential survives reinstall', status.success? && JSON.parse(stdout.lines.last).dig('data', 'authenticated')
 
-  _stdout, _stderr, status = fm.call('pixel', 'auth', 'logout')
-  assert 'logout removes the credential', status.success? && !credential_present.call
+  stdout, _stderr, status = fm.call('pixel', 'auth', 'logout')
+  logout = JSON.parse(stdout.lines.last)
+  status_stdout, _status_stderr, status_result = fm.call('pixel', 'auth', 'status')
+  credential_status = JSON.parse(status_stdout.lines.last)
+  logout_removed = status.success? && logout.dig('data', 'local_removed') == true
+  credential_missing = !status_result.success? && credential_status.dig('error', 'code') == 'credential_missing'
+  assert 'logout removes the credential', logout_removed && credential_missing
 
   run!('brew', 'uninstall', 'fm')
   assert 'final uninstall leaves no fm', !run?('sh', '-c', 'command -v fm', env: brew_path_env)
 ensure
-  File.write(formula_path, pr_formula)
   if macos
     run?('security', 'list-keychains', '-d', 'user', '-s', *original_keychains)
     run?('security', 'default-keychain', '-d', 'user', '-s', File.join(Dir.home, 'Library/Keychains/login.keychain-db'))
@@ -186,6 +213,7 @@ ensure
   end
   FileUtils.remove_entry(home)
   FileUtils.rm_f(tap_repo)
+  FileUtils.remove_entry(old_tap_repo) if old_tap_repo && File.exist?(old_tap_repo)
 end
 
 puts "Homebrew acceptance passed for #{version} (#{RUBY_PLATFORM})"
