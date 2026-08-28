@@ -177,6 +177,7 @@ class ReleasePackagingTest < Minitest::Test
       assert_includes rendered, 'on_macos do'
       assert_includes rendered, 'on_linux do'
       assert_includes rendered, 'version "0.1.0"'
+      assert_includes rendered, 'version_scheme 1'
       assert_equal 2, rendered.scan('on_arm do').length
       assert_equal 2, rendered.scan('on_intel do').length
       formula_manifest.fetch('assets').each_value do |asset|

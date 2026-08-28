@@ -3,6 +3,7 @@ class Fm < Formula
   homepage "https://github.com/feed-mob/feedmob-cli"
   version "0.2.0"
   license "MIT"
+  version_scheme 1
 
   on_macos do
     on_arm do
