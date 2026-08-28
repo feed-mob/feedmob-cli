@@ -26,6 +26,18 @@ class ServicesTest < Minitest::Test
     assert_nil service.revoke_path
   end
 
+  def test_femini_contract_uses_documented_bearer_authentication
+    service = FeedMob::CLI::Services.fetch('femini', env: {})
+
+    assert_equal 'Femini', service.label
+    assert_equal 'https://assistant.feedmob.ai', service.base_url
+    assert_equal 'FEEDMOB_FEMINI_TOKEN', service.token_env
+    assert_nil service.token_prefix
+    assert_equal '/clients.json?name_cont=__feedmob_cli_auth_probe__', service.identity_path
+    refute_predicate service, :identity_response
+    assert_nil service.revoke_path
+  end
+
   def test_https_base_url_environment_override_is_normalized
     service = FeedMob::CLI::Services.fetch(
       'pixel',

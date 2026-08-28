@@ -41,7 +41,8 @@ module FeedMob
       end
 
       def validate_token!(service, token)
-        return if token.to_s.start_with?(service.token_prefix)
+        prefix = service.token_prefix
+        return if prefix.nil? || token.to_s.start_with?(prefix)
 
         raise Error.new(
           code: 'invalid_token_format',

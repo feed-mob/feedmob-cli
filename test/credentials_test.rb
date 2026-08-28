@@ -80,4 +80,14 @@ class CredentialsTest < Minitest::Test
     assert_equal [%w[pixel fmpat_secret]], keychain.writes
     assert_equal ['pixel'], keychain.deletes
   end
+
+  def test_femini_accepts_a_bearer_token_without_a_documented_prefix
+    service = FeedMob::CLI::Services.fetch('femini', env: {})
+    keychain = FakeKeychain.new
+    credentials = FeedMob::CLI::Credentials.new(env: {}, keychain:)
+
+    credentials.store(service, 'femini-bearer-token')
+
+    assert_equal [%w[femini femini-bearer-token]], keychain.writes
+  end
 end

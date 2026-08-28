@@ -35,6 +35,12 @@ module FeedMob
 
         def service_name = 'time-off'
       end
+
+      class FeminiRequestGet < RequestGet
+        desc 'Perform an authenticated GET request against the Femini API'
+
+        def service_name = 'femini'
+      end
     end
   end
 end

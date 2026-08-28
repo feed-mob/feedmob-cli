@@ -34,6 +34,12 @@ module FeedMob
             ].join(' ')
           )
         end
+
+        def authentication_payload(service:, authenticated:, source:, response:)
+          payload = { service:, authenticated:, source: }
+          payload[:identity] = response.data if self.service.identity_response
+          payload
+        end
       end
     end
   end

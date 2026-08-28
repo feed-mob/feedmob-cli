@@ -15,6 +15,7 @@ module FeedMob
           token_env: 'FEEDMOB_PIXEL_TOKEN',
           token_prefix: 'fmpat_',
           identity_path: '/api/v1/cli/me',
+          identity_response: true,
           revoke_path: '/api/v1/cli/token',
           keychain_service: 'com.feedmob.fm.pixel'
         },
@@ -25,8 +26,20 @@ module FeedMob
           token_env: 'FEEDMOB_TIME_OFF_TOKEN',
           token_prefix: 'fmtopat_',
           identity_path: '/api/v1/me',
+          identity_response: true,
           revoke_path: nil,
           keychain_service: 'com.feedmob.fm.time-off'
+        },
+        'femini' => {
+          label: 'Femini',
+          base_url: 'https://assistant.feedmob.ai',
+          base_url_env: 'FEEDMOB_FEMINI_BASE_URL',
+          token_env: 'FEEDMOB_FEMINI_TOKEN',
+          token_prefix: nil,
+          identity_path: '/clients.json?name_cont=__feedmob_cli_auth_probe__',
+          identity_response: false,
+          revoke_path: nil,
+          keychain_service: 'com.feedmob.fm.femini'
         }
       }.freeze
 
@@ -45,6 +58,7 @@ module FeedMob
           token_env: definition.fetch(:token_env),
           token_prefix: definition.fetch(:token_prefix),
           identity_path: definition.fetch(:identity_path),
+          identity_response: definition.fetch(:identity_response),
           revoke_path: definition.fetch(:revoke_path),
           keychain_service: definition.fetch(:keychain_service)
         )

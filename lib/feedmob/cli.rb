@@ -39,6 +39,7 @@ module FeedMob
           Commands:
             doctor                  Check configuration and service authentication
             version                 Print the fm version
+            femini [SUBCOMMAND]     Work with Femini
             pixel [SUBCOMMAND]      Work with FeedMob Pixel
             time-off [SUBCOMMAND]   Work with FeedMob Time Off
         HELP

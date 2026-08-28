@@ -9,6 +9,7 @@ module FeedMob
       :token_env,
       :token_prefix,
       :identity_path,
+      :identity_response,
       :revoke_path,
       :keychain_service
     )
