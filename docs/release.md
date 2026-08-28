@@ -62,8 +62,11 @@ script/render-homebrew-formula --version 0.1.0 \
 ## Workflow
 
 `.github/workflows/release.yml` is manual (`workflow_dispatch`). There is no
-version input: the next version is computed from the latest release tag plus
-the `bump` input (`patch`/`minor`/`major`, default `patch`).
+version input: the next version is normally computed from the latest release
+tag plus the `bump` input (`patch`/`minor`/`major`, default `patch`). If a
+previous publish failed after committing a higher source version but before
+creating its tag, the workflow safely resumes that unreleased source version
+instead of calculating a lower version.
 
 - `publish=false` (default) is a dry run: build, verify, keep workflow
   artifacts. Linux builds additionally run `script/smoke-release-auth`, an
@@ -78,8 +81,8 @@ Publish sequence:
 
 1. The `bump` job commits the `version.rb` bump to `main` as the release bot
    and every later job builds from that commit, so `fm version` reports the
-   released version. A failed run leaves no tag behind, so re-running computes
-   the same version again.
+   released version. If a later step fails before the tag is created,
+   re-running resumes this higher, untagged source version.
 2. The `publish` job runs `script/publish-release`: create a draft Release at
    the bump commit, auto-generate "What's Changed" notes from merged PRs since
    the previous tag (checksums appended), upload the four archives plus

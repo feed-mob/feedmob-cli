@@ -15,4 +15,13 @@ class CiWorkflowTest < Minitest::Test
     assert_includes workflow, 'bundle exec rubocop --format simple'
     assert_includes workflow, 'gem build feedmob-cli.gemspec'
   end
+
+  def test_release_workflow_assembles_from_the_bump_commit_and_resumes_pending_versions
+    workflow_path = File.expand_path('../.github/workflows/release.yml', __dir__)
+    workflow = File.read(workflow_path)
+
+    assert_includes workflow, 'needs: [validate, bump, build]'
+    assert_includes workflow, 'Reusing unreleased source version $next.'
+    assert_includes workflow, 'Source version must not be older than the latest release.'
+  end
 end

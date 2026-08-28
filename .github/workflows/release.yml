@@ -41,25 +41,38 @@ jobs:
         with:
           ruby-version: .ruby-version
           bundler-cache: true
-      - name: Compute the next version from the latest tag
+      - name: Compute the release version
         id: version
         env:
           BUMP: ${{ inputs.bump }}
         run: |
           git fetch origin --tags --force --quiet
           latest=$(git tag --list 'v[0-9]*' --sort=-v:refname | head -1)
+          source_version=$(ruby -Ilib -r feedmob/cli/version -e 'print FeedMob::CLI::VERSION')
           if [ -z "$latest" ]; then
-            next=$(ruby -Ilib -r feedmob/cli/version -e 'print FeedMob::CLI::VERSION')
+            next=$source_version
           else
-            next=$(ruby -e '
-              major, minor, patch = ARGV.fetch(0).sub(/\Av/, "").split(".").map(&:to_i)
-              case ARGV.fetch(1)
-              when "major" then major += 1; minor = 0; patch = 0
-              when "minor" then minor += 1; patch = 0
-              else patch += 1
-              end
-              print [major, minor, patch].join(".")
-            ' "$latest" "$BUMP")
+            latest_version=${latest#v}
+            version_state=$(ruby -rrubygems -e '
+              source = Gem::Version.new(ARGV.fetch(0))
+              latest = Gem::Version.new(ARGV.fetch(1))
+              abort "Source version must not be older than the latest release." if source < latest
+              print(source > latest ? "pending" : "released")
+            ' "$source_version" "$latest_version")
+            if [ "$version_state" = pending ]; then
+              next=$source_version
+              echo "Reusing unreleased source version $next."
+            else
+              next=$(ruby -e '
+                major, minor, patch = ARGV.fetch(0).sub(/\Av/, "").split(".").map(&:to_i)
+                case ARGV.fetch(1)
+                when "major" then major += 1; minor = 0; patch = 0
+                when "minor" then minor += 1; patch = 0
+                else patch += 1
+                end
+                print [major, minor, patch].join(".")
+              ' "$latest" "$BUMP")
+            fi
           fi
           echo "value=$next" >> "$GITHUB_OUTPUT"
           echo "previous_tag=$latest" >> "$GITHUB_OUTPUT"
@@ -186,7 +199,7 @@ jobs:
 
   assemble:
     name: Assemble release assets
-    needs: [validate, build]
+    needs: [validate, bump, build]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
