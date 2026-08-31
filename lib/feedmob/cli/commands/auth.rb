@@ -157,6 +157,24 @@ module FeedMob
 
         def service_name = 'femini'
       end
+
+      class PagesAuthLogin < AuthLogin
+        desc 'Verify and securely save a Pages API key'
+
+        def service_name = 'pages'
+      end
+
+      class PagesAuthStatus < AuthStatus
+        desc 'Show the authenticated Pages identity'
+
+        def service_name = 'pages'
+      end
+
+      class PagesAuthLogout < AuthLogout
+        desc 'Remove the local Pages API key'
+
+        def service_name = 'pages'
+      end
     end
   end
 end

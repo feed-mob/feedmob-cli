@@ -13,6 +13,7 @@ class CliHelpTest < Minitest::Test
     assert_predicate status, :success?, stderr
     assert_includes stdout, 'doctor'
     assert_includes stdout, 'femini'
+    assert_includes stdout, 'pages'
     assert_includes stdout, 'pixel'
     assert_includes stdout, 'time-off'
   end

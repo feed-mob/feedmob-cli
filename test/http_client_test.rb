@@ -53,6 +53,54 @@ class HttpClientTest < Minitest::Test
     assert_equal 'ok', client.request(method: :get, path: '/up', token: 'fmpat_secret').data
   end
 
+  def test_json_request_sets_content_type_and_serializes_the_body
+    transport = FakeTransport.new(
+      response: { status: 200, headers: {}, body: '{"code":0,"data":{"id":"page-id"}}' }
+    )
+    client = FeedMob::CLI::HTTP::Client.new(service: @service, transport:)
+
+    response = client.request(
+      method: :post,
+      path: '/api/pages',
+      token: 'fmpat_secret',
+      json: { owner: 'growth', html: '<h1>Report</h1>' }
+    )
+
+    assert_equal 'page-id', response.data.dig('data', 'id')
+    assert_equal(
+      {
+        method: :post,
+        url: 'https://feedmob-pixel-dashboard.feedmob.com/rails/api/pages',
+        headers: {
+          'Accept' => 'application/json',
+          'Authorization' => 'Bearer fmpat_secret',
+          'Content-Type' => 'application/json'
+        },
+        body: '{"owner":"growth","html":"<h1>Report</h1>"}'
+      },
+      transport.requests.fetch(0)
+    )
+  end
+
+  def test_pages_style_error_uses_the_documented_message_without_exposing_token
+    transport = FakeTransport.new(
+      response: {
+        status: 422,
+        headers: { 'content-type' => 'application/json' },
+        body: '{"code":422,"msg":"HTML is invalid."}'
+      }
+    )
+    client = FeedMob::CLI::HTTP::Client.new(service: @service, transport:)
+
+    error = assert_raises(FeedMob::CLI::Error) do
+      client.request(method: :post, path: '/api/pages', token: 'fmpat_never-print-me', json: { html: 'bad' })
+    end
+
+    assert_equal '422', error.code
+    assert_equal 'HTML is invalid.', error.message
+    refute_includes error.message, 'fmpat_never-print-me'
+  end
+
   def test_rejects_paths_that_can_escape_the_configured_host
     client = FeedMob::CLI::HTTP::Client.new(
       service: @service,

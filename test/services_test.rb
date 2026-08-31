@@ -38,6 +38,18 @@ class ServicesTest < Minitest::Test
     assert_nil service.revoke_path
   end
 
+  def test_pages_contract_uses_a_service_specific_api_key_and_identity_endpoint
+    service = FeedMob::CLI::Services.fetch('pages', env: {})
+
+    assert_equal 'Pages', service.label
+    assert_equal 'https://pages.feedmob.com', service.base_url
+    assert_equal 'FEEDMOB_PAGES_TOKEN', service.token_env
+    assert_nil service.token_prefix
+    assert_equal '/api/me', service.identity_path
+    assert_nil service.revoke_path
+    assert_equal 'com.feedmob.fm.pages', service.keychain_service
+  end
+
   def test_https_base_url_environment_override_is_normalized
     service = FeedMob::CLI::Services.fetch(
       'pixel',

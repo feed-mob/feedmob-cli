@@ -3,6 +3,7 @@
 require 'dry/cli'
 require_relative 'commands/auth'
 require_relative 'commands/doctor'
+require_relative 'commands/pages'
 require_relative 'commands/request'
 require_relative 'commands/version'
 
@@ -41,6 +42,28 @@ module FeedMob
         end
         femini.register 'request' do |request|
           request.register 'get', FeminiRequestGet
+        end
+      end
+      register 'pages' do |pages|
+        pages.register 'auth' do |auth|
+          auth.register 'login', PagesAuthLogin
+          auth.register 'status', PagesAuthStatus
+          auth.register 'logout', PagesAuthLogout
+        end
+        pages.register 'list', PagesList
+        pages.register 'show', PagesShow
+        pages.register 'stats', PagesStats
+        pages.register 'publish', PagesPublish
+        pages.register 'update', PagesUpdate
+        pages.register 'share' do |share|
+          share.register 'enable', PagesShareEnable
+          share.register 'revoke', PagesShareRevoke
+        end
+        pages.register 'asset' do |asset|
+          asset.register 'upload', PagesAssetUpload
+        end
+        pages.register 'request' do |request|
+          request.register 'get', PagesRequestGet
         end
       end
     end

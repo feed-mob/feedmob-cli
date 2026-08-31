@@ -41,6 +41,12 @@ module FeedMob
 
         def service_name = 'femini'
       end
+
+      class PagesRequestGet < RequestGet
+        desc 'Perform an authenticated GET request against the Pages API'
+
+        def service_name = 'pages'
+      end
     end
   end
 end

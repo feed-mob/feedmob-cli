@@ -1,8 +1,9 @@
 # FeedMob CLI (`fm`)
 
 `fm` is the command-line interface for FeedMob services. It manages isolated
-credentials for Pixel, Time Off, and Femini, verifies authentication, and issues read-only
-API requests — with stable JSON output designed for scripts and automation.
+credentials for Pixel, Time Off, Femini, and Pages, verifies authentication, and issues
+safe, service-specific API requests — with stable JSON output designed for scripts and
+automation.
 
 ```text
 fm doctor
@@ -19,6 +20,18 @@ fm femini auth login [--token-stdin]
 fm femini auth status
 fm femini auth logout
 fm femini request get <path>
+fm pages auth login [--token-stdin]
+fm pages auth status
+fm pages auth logout
+fm pages list [filters]
+fm pages show <owner> <slug>
+fm pages stats
+fm pages publish --owner <owner> --html-file <file> [options]
+fm pages update <page-id> [options]
+fm pages share enable <page-id> [--rotate]
+fm pages share revoke <page-id>
+fm pages asset upload <image-file>
+fm pages request get <path>
 ```
 
 ## Installation
@@ -69,6 +82,7 @@ Each service keeps its own credential, resolved in this order:
 | Pixel | `FEEDMOB_PIXEL_TOKEN` | `https://feedmob-pixel-dashboard.feedmob.com/rails` | `GET /api/v1/cli/me` | Revokes remotely, deletes local store |
 | Time Off | `FEEDMOB_TIME_OFF_TOKEN` | `https://time-off.feedmob.com` | `GET /api/v1/me` | Deletes local store only |
 | Femini | `FEEDMOB_FEMINI_TOKEN` | `https://assistant.feedmob.ai` | `GET /clients.json?name_cont=__feedmob_cli_auth_probe__` | Deletes local store only |
+| Pages | `FEEDMOB_PAGES_TOKEN` | `https://pages.feedmob.com` | `GET /api/me` | Deletes local store only |
 
 ```sh
 # Interactive, hidden input; the token never appears in argv or history
@@ -79,11 +93,12 @@ fm pixel auth status
 printf '%s' "$FEEDMOB_PIXEL_TOKEN" | fm pixel auth login --token-stdin
 ```
 
-Endpoints can be overridden with `FEEDMOB_PIXEL_BASE_URL` and
-`FEEDMOB_TIME_OFF_BASE_URL`, and `FEEDMOB_FEMINI_BASE_URL`. Overrides must use HTTPS; plain HTTP is only
-accepted for loopback addresses (`localhost`, `127.0.0.1`, `::1`) together
-with an explicit `FEEDMOB_ALLOW_INSECURE_HTTP=1` — never set that variable
-in shared or production environments.
+Endpoints can be overridden with `FEEDMOB_PIXEL_BASE_URL`,
+`FEEDMOB_TIME_OFF_BASE_URL`, `FEEDMOB_FEMINI_BASE_URL`, and
+`FEEDMOB_PAGES_BASE_URL`. Overrides must use HTTPS; plain HTTP is only accepted
+for loopback addresses (`localhost`, `127.0.0.1`, `::1`) together with an
+explicit `FEEDMOB_ALLOW_INSECURE_HTTP=1` — never set that variable in shared or
+production environments.
 
 ## Usage
 
@@ -104,6 +119,25 @@ the Profile menu in Femini, then run `fm femini auth login`. Femini does not
 document a dedicated identity endpoint, so login/status use a filtered,
 read-only clients request as an authentication probe and never print its
 response. Femini API tokens have no documented prefix requirement.
+
+Pages uses a personal API key from Pages Console → Connect AI. The key is sent
+as a Bearer token and is isolated under `FEEDMOB_PAGES_TOKEN` / the Pages
+Keychain entry. The documented Pages lifecycle operations are intentionally
+limited to list, detail, stats, publish, update, external sharing, and image
+uploads; `delete`, `restore`, `revert`, and `claim` are not exposed by `fm`.
+
+```sh
+printf '%s' "$FEEDMOB_PAGES_TOKEN" | fm pages auth login --token-stdin
+fm pages list --scope mine --q growth
+fm pages publish --owner growth --html-file report.html --visibility unlisted
+fm pages asset upload chart.png
+```
+
+`publish` requires `--owner` and `--html-file`. `update` accepts an HTML
+replacement with `--html-file`, small find/replace changes from `--edits-file`,
+and optional metadata; the HTML replacement and edits are mutually exclusive.
+Advanced `data_sources` and multi-file site payloads are accepted from JSON
+files with `--data-sources-file` and `--files-file`.
 
 ### JSON output
 
@@ -127,7 +161,9 @@ a stable JSON envelope to stdout, including errors:
 - Full tokens never appear in logs, JSON output, or error messages;
 - Requests go only to the configured service host over HTTPS; loopback HTTP
   requires an explicit opt-in;
-- Only GET requests are exposed — no write-API escape hatch.
+- Generic `request` commands remain GET-only. Pages write operations are
+  explicit, field-validated commands rather than a generic write-API escape
+  hatch.
 
 ## Troubleshooting
 
