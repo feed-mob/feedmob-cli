@@ -5,6 +5,7 @@ require_relative 'commands/auth'
 require_relative 'commands/doctor'
 require_relative 'commands/pages'
 require_relative 'commands/request'
+require_relative 'commands/time_off'
 require_relative 'commands/version'
 
 module FeedMob
@@ -32,6 +33,9 @@ module FeedMob
         end
         time_off.register 'request' do |request|
           request.register 'get', TimeOffRequestGet
+        end
+        time_off.register 'journal' do |journal|
+          journal.register 'update', TimeOffJournalUpdate
         end
       end
       register 'femini' do |femini|

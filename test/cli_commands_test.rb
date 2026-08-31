@@ -260,6 +260,45 @@ class CliCommandsTest < Minitest::Test
     assert_equal({ 'items' => [1, 2] }, JSON.parse(stdout).dig('data', 'response'))
   end
 
+  def test_time_off_journal_update_uses_documented_upsert_endpoint
+    credentials = FakeCredentials.new
+    time_off_client = FakeClient.new(
+      [FeedMob::CLI::HTTP::Response.new(
+        status: 200,
+        headers: {},
+        data: { 'journal' => { 'date' => '2026-08-31', 'content' => 'Completed API integration' } }
+      )]
+    )
+    use_runtime(credentials:, clients: { 'pixel' => FakeClient.new, 'time-off' => time_off_client })
+
+    stdout, = run_cli(
+      'time-off', 'journal', 'update', '2026-08-31', '--content', 'Completed API integration', '--json'
+    )
+
+    assert_equal(
+      { method: :put, path: '/api/v1/journals/2026-08-31', token: 'fmpat_saved',
+        json: { content: 'Completed API integration' } },
+      time_off_client.requests.fetch(0)
+    )
+    assert_equal 'Completed API integration', JSON.parse(stdout).dig('data', 'response', 'journal', 'content')
+  end
+
+  def test_time_off_journal_update_rejects_invalid_date_and_empty_content
+    credentials = FakeCredentials.new
+    time_off_client = FakeClient.new
+    use_runtime(credentials:, clients: { 'pixel' => FakeClient.new, 'time-off' => time_off_client })
+
+    stdout, = run_cli('time-off', 'journal', 'update', '2026-8-31', '--content', 'Done', '--json')
+    assert_equal 'invalid_input', JSON.parse(stdout).dig('error', 'code')
+
+    stdout, = run_cli('time-off', 'journal', 'update', '2026-08-31', '--content', '  ', '--json')
+    assert_equal 'invalid_input', JSON.parse(stdout).dig('error', 'code')
+
+    stdout, = run_cli('time-off', 'journal', 'update', '2026-08-31', '--json')
+    assert_equal 'invalid_input', JSON.parse(stdout).dig('error', 'code')
+    assert_empty time_off_client.requests
+  end
+
   def test_doctor_reports_missing_credentials_without_calling_a_service
     credentials = FakeCredentials.new(credential: FeedMob::CLI::Credential.new(value: nil, source: 'missing'))
     pixel_client = FakeClient.new
