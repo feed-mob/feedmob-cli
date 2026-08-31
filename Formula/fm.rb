@@ -1,31 +1,30 @@
 class Fm < Formula
   desc "Command-line interface for FeedMob services"
   homepage "https://github.com/feed-mob/feedmob-cli"
-  version "0.2.0"
   license "MIT"
   version_scheme 1
 
   on_macos do
     on_arm do
-      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.2.0/fm-darwin-arm64.tar.gz"
-      sha256 "a7bc4818920136065b6b507433015b74aeb7a08ab56295c23267e76289ff0bf7"
+      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.3.1/fm-darwin-arm64.tar.gz"
+      sha256 "bed7706d1e80895d9902313891ea874d175a1822111d833eee8fce799209abc1"
     end
 
     on_intel do
-      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.2.0/fm-darwin-x86_64.tar.gz"
-      sha256 "1dbe68585d81935074c561dee8924b0acb63f1a4ff454a834b919d59620f8c83"
+      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.3.1/fm-darwin-x86_64.tar.gz"
+      sha256 "52107adc81d7df7de17299a482d0ca53ec8b4d832e6a77676f6747a8524e8141"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.2.0/fm-linux-arm64.tar.gz"
-      sha256 "e34898ce4faeb03622cb67188dbb99ed93782cd943b61e114367813ea59243df"
+      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.3.1/fm-linux-arm64.tar.gz"
+      sha256 "ecdcc8afa7fe56289cb57f92d67707ff1bbf90a9d3af4ef984228c15d6a478bd"
     end
 
     on_intel do
-      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.2.0/fm-linux-x86_64.tar.gz"
-      sha256 "b3a65e5e9f0afdb5f99abf74a0e4c4d687761148c0c4a7a45e5a269988d56bc2"
+      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.3.1/fm-linux-x86_64.tar.gz"
+      sha256 "cd710b365f94be59fb7b8f80d5dc5a5436951acb0f7afabc93c177090e5ec155"
     end
   end
 
