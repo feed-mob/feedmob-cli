@@ -15,6 +15,7 @@ fm pixel request get <path>
 fm time-off auth login [--token-stdin]
 fm time-off auth status
 fm time-off auth logout
+fm time-off request put <path> --json-file <file>
 fm time-off request get <path>
 fm femini auth login [--token-stdin]
 fm femini auth status
@@ -113,6 +114,15 @@ fm pixel request get /api/v1/cli/me
 `request get` only accepts relative paths starting with a single `/`;
 absolute URLs and `//host` paths are rejected so tokens can never leak to an
 unconfigured host. Only GET requests are exposed.
+
+Time Off journal updates use the existing `request` command. Write the JSON
+request body to a file, then call the documented upsert endpoint; it always
+writes to the user represented by the configured Time Off token:
+
+```sh
+printf '%s' '{"content":"Completed API integration"}' > journal.json
+fm time-off request put /api/v1/journals/2026-08-31 --json-file journal.json
+```
 
 Femini uses the documented Bearer Token authentication: obtain the token from
 the Profile menu in Femini, then run `fm femini auth login`. Femini does not

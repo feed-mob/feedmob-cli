@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'test_helper'
+require 'tempfile'
 require 'feedmob/cli'
 require 'feedmob/cli/services'
 
@@ -258,6 +259,53 @@ class CliCommandsTest < Minitest::Test
       pixel_client.requests.fetch(0)
     )
     assert_equal({ 'items' => [1, 2] }, JSON.parse(stdout).dig('data', 'response'))
+  end
+
+  def test_time_off_request_put_uses_documented_journal_upsert_endpoint
+    credentials = FakeCredentials.new
+    time_off_client = FakeClient.new(
+      [FeedMob::CLI::HTTP::Response.new(
+        status: 200,
+        headers: {},
+        data: { 'journal' => { 'date' => '2026-08-31', 'content' => 'Completed API integration' } }
+      )]
+    )
+    use_runtime(credentials:, clients: { 'pixel' => FakeClient.new, 'time-off' => time_off_client })
+
+    Tempfile.create(['journal', '.json']) do |file|
+      file.write(JSON.generate(content: 'Completed API integration'))
+      file.flush
+
+      stdout, = run_cli(
+        'time-off', 'request', 'put', '/api/v1/journals/2026-08-31', '--json-file', file.path, '--json'
+      )
+
+      assert_equal(
+        { method: :put, path: '/api/v1/journals/2026-08-31', token: 'fmpat_saved',
+          json: { 'content' => 'Completed API integration' } },
+        time_off_client.requests.fetch(0)
+      )
+      assert_equal 'Completed API integration', JSON.parse(stdout).dig('data', 'response', 'journal', 'content')
+    end
+  end
+
+  def test_time_off_request_put_rejects_missing_or_invalid_json_file
+    credentials = FakeCredentials.new
+    time_off_client = FakeClient.new
+    use_runtime(credentials:, clients: { 'pixel' => FakeClient.new, 'time-off' => time_off_client })
+
+    stdout, = run_cli('time-off', 'request', 'put', '/api/v1/journals/2026-08-31', '--json')
+    assert_equal 'invalid_input', JSON.parse(stdout).dig('error', 'code')
+
+    Tempfile.create(['journal-invalid', '.json']) do |file|
+      file.write('{')
+      file.flush
+      stdout, = run_cli(
+        'time-off', 'request', 'put', '/api/v1/journals/2026-08-31', '--json-file', file.path, '--json'
+      )
+      assert_equal 'invalid_input', JSON.parse(stdout).dig('error', 'code')
+    end
+    assert_empty time_off_client.requests
   end
 
   def test_doctor_reports_missing_credentials_without_calling_a_service

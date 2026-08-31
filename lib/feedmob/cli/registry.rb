@@ -32,6 +32,7 @@ module FeedMob
         end
         time_off.register 'request' do |request|
           request.register 'get', TimeOffRequestGet
+          request.register 'put', TimeOffRequestPut
         end
       end
       register 'femini' do |femini|
