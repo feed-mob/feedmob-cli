@@ -40,6 +40,17 @@ module FeedMob
           identity_response: false,
           revoke_path: nil,
           keychain_service: 'com.feedmob.fm.femini'
+        },
+        'pages' => {
+          label: 'Pages',
+          base_url: 'https://pages.feedmob.com',
+          base_url_env: 'FEEDMOB_PAGES_BASE_URL',
+          token_env: 'FEEDMOB_PAGES_TOKEN',
+          token_prefix: nil,
+          identity_path: '/api/me',
+          identity_response: true,
+          revoke_path: nil,
+          keychain_service: 'com.feedmob.fm.pages'
         }
       }.freeze
 

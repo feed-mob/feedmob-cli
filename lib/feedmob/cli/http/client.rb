@@ -16,16 +16,9 @@ module FeedMob
           @transport = transport
         end
 
-        def request(method:, path:, token:)
+        def request(method:, path:, token:, **options)
           validate_path!(path)
-          raw = @transport.request(
-            method: method.to_sym,
-            url: "#{@service.base_url}#{path}",
-            headers: {
-              'Accept' => 'application/json',
-              'Authorization' => "Bearer #{token}"
-            }
-          )
+          raw = @transport.request(**transport_request(method:, path:, token:, options:))
           data = parse_body(raw.fetch(:body))
           raise_api_error!(raw.fetch(:status), data) unless (200..299).cover?(raw.fetch(:status))
 
@@ -40,6 +33,24 @@ module FeedMob
         end
 
         private
+
+        def transport_request(method:, path:, token:, options:)
+          json = options.fetch(:json, nil)
+          body = options.fetch(:body, nil)
+          if !json.nil? && !body.nil?
+            raise Error.new(code: 'invalid_request', message: 'Specify either json or body, not both.')
+          end
+
+          headers = default_headers(token).merge(options.fetch(:headers, {}))
+          body = JSON.generate(json).tap { headers['Content-Type'] = 'application/json' } unless json.nil?
+          request = { method: method.to_sym, url: "#{@service.base_url}#{path}", headers: }
+          request[:body] = body unless body.nil?
+          request
+        end
+
+        def default_headers(token)
+          { 'Accept' => 'application/json', 'Authorization' => "Bearer #{token}" }
+        end
 
         def validate_path!(path)
           value = path.to_s
@@ -64,16 +75,32 @@ module FeedMob
         end
 
         def raise_api_error!(status, data)
-          remote_error = data.is_a?(Hash) ? data['error'] : nil
-          if remote_error.is_a?(Hash)
-            code = remote_error['code'] || 'http_error'
-            message = remote_error['message'] || "#{@service.label} API returned HTTP #{status}."
-          else
-            code = 'http_error'
-            message = remote_error.is_a?(String) ? remote_error : "#{@service.label} API returned HTTP #{status}."
-          end
+          code, message = api_error(data, status)
+          raise Error.new(code: code.to_s, message:, details: { status: })
+        end
 
-          raise Error.new(code:, message:, details: { status: })
+        def api_error(data, status)
+          remote_error = data['error'] if data.is_a?(Hash)
+          if remote_error.is_a?(Hash)
+            [remote_error['code'] || 'http_error', remote_error['message'] || default_api_error(status)]
+          else
+            [data_code(data), data_message(data, remote_error, status)]
+          end
+        end
+
+        def data_code(data)
+          data.is_a?(Hash) ? data['code'] || 'http_error' : 'http_error'
+        end
+
+        def data_message(data, remote_error, status)
+          return remote_error if remote_error.is_a?(String)
+          return default_api_error(status) unless data.is_a?(Hash)
+
+          data['message'] || data['msg'] || default_api_error(status)
+        end
+
+        def default_api_error(status)
+          "#{@service.label} API returned HTTP #{status}."
         end
       end
     end
