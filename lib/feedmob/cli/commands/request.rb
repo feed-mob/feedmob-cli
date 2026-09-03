@@ -83,6 +83,28 @@ module FeedMob
 
         def service_name = 'pages'
       end
+
+      class WorkspaceRequestGet < RequestGet
+        desc 'Perform an authenticated GET request against the FeedMob Workspace API'
+
+        def call(path:, **)
+          validate_workspace_path!(path)
+          super
+        end
+
+        def service_name = 'workspace'
+
+        private
+
+        def validate_workspace_path!(path)
+          return if path.to_s.start_with?('/api/v1/')
+
+          raise Error.new(
+            code: 'invalid_path',
+            message: 'FeedMob Workspace requests must target a path under /api/v1/.'
+          )
+        end
+      end
     end
   end
 end

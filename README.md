@@ -1,7 +1,7 @@
 # FeedMob CLI (`fm`)
 
 `fm` is the command-line interface for FeedMob services. It manages isolated
-credentials for Pixel, Time Off, Femini, and Pages, verifies authentication, and issues
+credentials for Pixel, Time Off, Femini, Pages, and FeedMob Workspace, verifies authentication, and issues
 safe, service-specific API requests — with stable JSON output designed for scripts and
 automation.
 
@@ -33,6 +33,10 @@ fm pages share enable <page-id> [--rotate]
 fm pages share revoke <page-id>
 fm pages asset upload <image-file>
 fm pages request get <path>
+fm workspace auth login [--token-stdin]
+fm workspace auth status
+fm workspace auth logout
+fm workspace request get <api-v1-path>
 ```
 
 ## Installation
@@ -84,6 +88,7 @@ Each service keeps its own credential, resolved in this order:
 | Time Off | `FEEDMOB_TIME_OFF_TOKEN` | `https://time-off.feedmob.com` | `GET /api/v1/me` | Deletes local store only |
 | Femini | `FEEDMOB_FEMINI_TOKEN` | `https://assistant.feedmob.ai` | `GET /clients.json?name_cont=__feedmob_cli_auth_probe__` | Deletes local store only |
 | Pages | `FEEDMOB_PAGES_TOKEN` | `https://pages.feedmob.com` | `GET /api/me` | Deletes local store only |
+| FeedMob Workspace | `FEEDMOB_WORKSPACE_TOKEN` | `https://admin.feedmob.com` | `GET /api/v1/me` | Deletes local store only |
 
 ```sh
 # Interactive, hidden input; the token never appears in argv or history
@@ -96,7 +101,7 @@ printf '%s' "$FEEDMOB_PIXEL_TOKEN" | fm pixel auth login --token-stdin
 
 Endpoints can be overridden with `FEEDMOB_PIXEL_BASE_URL`,
 `FEEDMOB_TIME_OFF_BASE_URL`, `FEEDMOB_FEMINI_BASE_URL`, and
-`FEEDMOB_PAGES_BASE_URL`. Overrides must use HTTPS; plain HTTP is only accepted
+`FEEDMOB_PAGES_BASE_URL`, and `FEEDMOB_WORKSPACE_BASE_URL`. Overrides must use HTTPS; plain HTTP is only accepted
 for loopback addresses (`localhost`, `127.0.0.1`, `::1`) together with an
 explicit `FEEDMOB_ALLOW_INSECURE_HTTP=1` — never set that variable in shared or
 production environments.
@@ -141,6 +146,18 @@ printf '%s' "$FEEDMOB_PAGES_TOKEN" | fm pages auth login --token-stdin
 fm pages list --scope mine --q growth
 fm pages publish --owner growth --html-file report.html --visibility unlisted
 fm pages asset upload chart.png
+```
+
+FeedMob Workspace is the internal, read-only API for shared operational data.
+Obtain a personal access token from FeedMob SSO, then authenticate without
+placing the token in shell history. Workspace requests are GET-only and must
+stay under `/api/v1/`; access to individual resources is enforced by the
+server-side Workspace privileges. Consult the SSO-protected API Reference for
+available resources rather than treating CLI help as an endpoint catalog.
+
+```sh
+fm workspace auth login
+fm workspace request get /api/v1/me
 ```
 
 `publish` requires `--owner` and `--html-file`. `update` accepts an HTML

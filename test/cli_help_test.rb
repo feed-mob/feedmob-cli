@@ -16,5 +16,6 @@ class CliHelpTest < Minitest::Test
     assert_includes stdout, 'pages'
     assert_includes stdout, 'pixel'
     assert_includes stdout, 'time-off'
+    assert_includes stdout, 'workspace'
   end
 end
