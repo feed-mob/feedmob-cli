@@ -43,6 +43,7 @@ module FeedMob
             pages [SUBCOMMAND]      Work with FeedMob Pages
             pixel [SUBCOMMAND]      Work with FeedMob Pixel
             time-off [SUBCOMMAND]   Work with FeedMob Time Off
+            workspace [SUBCOMMAND]  Work with FeedMob Workspace
         HELP
         return 0
       end

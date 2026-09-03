@@ -175,6 +175,24 @@ module FeedMob
 
         def service_name = 'pages'
       end
+
+      class WorkspaceAuthLogin < AuthLogin
+        desc 'Verify and securely save a FeedMob Workspace credential'
+
+        def service_name = 'workspace'
+      end
+
+      class WorkspaceAuthStatus < AuthStatus
+        desc 'Show the authenticated FeedMob Workspace identity'
+
+        def service_name = 'workspace'
+      end
+
+      class WorkspaceAuthLogout < AuthLogout
+        desc 'Remove the local FeedMob Workspace credential'
+
+        def service_name = 'workspace'
+      end
     end
   end
 end

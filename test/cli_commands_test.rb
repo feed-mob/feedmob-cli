@@ -184,6 +184,41 @@ class CliCommandsTest < Minitest::Test
     assert_equal({ 'series' => [] }, JSON.parse(stdout).dig('data', 'response'))
   end
 
+  def test_workspace_request_get_is_limited_to_the_versioned_workspace_api
+    credentials = FakeCredentials.new(
+      credential: FeedMob::CLI::Credential.new(value: 'fmapat_workspace', source: 'keychain')
+    )
+    workspace_client = FakeClient.new(
+      [FeedMob::CLI::HTTP::Response.new(status: 200, headers: {}, data: { 'user' => { 'id' => 42 } })]
+    )
+    use_runtime(
+      credentials:,
+      clients: { 'pixel' => FakeClient.new, 'time-off' => FakeClient.new, 'workspace' => workspace_client }
+    )
+
+    stdout, = run_cli('workspace', 'request', 'get', '/api/v1/me', '--json')
+
+    assert_equal(
+      { method: :get, path: '/api/v1/me', token: 'fmapat_workspace' },
+      workspace_client.requests.fetch(0)
+    )
+    assert_equal({ 'user' => { 'id' => 42 } }, JSON.parse(stdout).dig('data', 'response'))
+  end
+
+  def test_workspace_request_get_rejects_paths_outside_the_versioned_workspace_api
+    credentials = FakeCredentials.new
+    workspace_client = FakeClient.new
+    use_runtime(
+      credentials:,
+      clients: { 'pixel' => FakeClient.new, 'time-off' => FakeClient.new, 'workspace' => workspace_client }
+    )
+
+    _stdout, _stderr, status = run_cli('workspace', 'request', 'get', '/api-reference', '--json')
+
+    assert_equal 1, status
+    assert_empty workspace_client.requests
+  end
+
   def test_pixel_logout_revokes_the_remote_token_then_deletes_local_keychain_value
     credentials = FakeCredentials.new
     pixel_client = FakeClient.new(

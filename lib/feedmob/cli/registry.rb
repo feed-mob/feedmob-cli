@@ -67,6 +67,16 @@ module FeedMob
           request.register 'get', PagesRequestGet
         end
       end
+      register 'workspace' do |workspace|
+        workspace.register 'auth' do |auth|
+          auth.register 'login', WorkspaceAuthLogin
+          auth.register 'status', WorkspaceAuthStatus
+          auth.register 'logout', WorkspaceAuthLogout
+        end
+        workspace.register 'request' do |request|
+          request.register 'get', WorkspaceRequestGet
+        end
+      end
     end
   end
 end
