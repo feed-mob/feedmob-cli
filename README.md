@@ -74,38 +74,6 @@ export PATH="$HOME/.local/bin:$PATH"
 fm version
 ```
 
-## Configuration
-
-Each service keeps its own credential, resolved in this order:
-
-1. The service's environment variable;
-2. The macOS Keychain, or an AES-256-GCM encrypted local store elsewhere;
-3. Unconfigured.
-
-| Service | Token env var | Default endpoint | Identity endpoint | Logout behavior |
-| --- | --- | --- | --- | --- |
-| Pixel | `FEEDMOB_PIXEL_TOKEN` | `https://feedmob-pixel-dashboard.feedmob.com/rails` | `GET /api/v1/cli/me` | Revokes remotely, deletes local store |
-| Time Off | `FEEDMOB_TIME_OFF_TOKEN` | `https://time-off.feedmob.com` | `GET /api/v1/me` | Deletes local store only |
-| Femini | `FEEDMOB_FEMINI_TOKEN` | `https://assistant.feedmob.ai` | `GET /clients.json?name_cont=__feedmob_cli_auth_probe__` | Deletes local store only |
-| Pages | `FEEDMOB_PAGES_TOKEN` | `https://pages.feedmob.com` | `GET /api/me` | Deletes local store only |
-| FeedMob Workspace | `FEEDMOB_WORKSPACE_TOKEN` | `https://admin.feedmob.com` | `GET /api/v1/me` | Deletes local store only |
-
-```sh
-# Interactive, hidden input; the token never appears in argv or history
-fm pixel auth login
-fm pixel auth status
-
-# Explicitly read from stdin, for automation
-printf '%s' "$FEEDMOB_PIXEL_TOKEN" | fm pixel auth login --token-stdin
-```
-
-Endpoints can be overridden with `FEEDMOB_PIXEL_BASE_URL`,
-`FEEDMOB_TIME_OFF_BASE_URL`, `FEEDMOB_FEMINI_BASE_URL`, and
-`FEEDMOB_PAGES_BASE_URL`, and `FEEDMOB_WORKSPACE_BASE_URL`. Overrides must use HTTPS; plain HTTP is only accepted
-for loopback addresses (`localhost`, `127.0.0.1`, `::1`) together with an
-explicit `FEEDMOB_ALLOW_INSECURE_HTTP=1` — never set that variable in shared or
-production environments.
-
 ## Usage
 
 `fm doctor` checks each configured service against its identity endpoint and
