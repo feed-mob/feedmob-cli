@@ -22,7 +22,10 @@ module FeedMob
           data = parse_body(raw.fetch(:body))
           raise_api_error!(raw.fetch(:status), data) unless (200..299).cover?(raw.fetch(:status))
 
-          Response.new(status: raw.fetch(:status), headers: raw.fetch(:headers), data:)
+          Response.new(
+            status: raw.fetch(:status), headers: raw.fetch(:headers),
+            data: options[:raw] ? raw.fetch(:body) : data
+          )
         rescue Error
           raise
         rescue Timeout::Error, SocketError, SystemCallError, OpenSSL::SSL::SSLError => e

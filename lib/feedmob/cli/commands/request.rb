@@ -27,6 +27,28 @@ module FeedMob
 
       class PixelRequestGet < RequestGet
         desc 'Perform an authenticated GET request against the Pixel API'
+        option :raw, type: :boolean, default: false, desc: 'Write the response body verbatim (incompatible with --json)'
+
+        def call(path:, raw: false, **)
+          validate_pixel_request!(path, raw)
+          return super(path:) unless raw
+
+          credential = credential!(service)
+          response = runtime.client(service).request(method: :get, path:, token: credential.value, raw: true)
+          (@out || $stdout).write(response.data)
+        end
+
+        private
+
+        def validate_pixel_request!(path, raw)
+          if raw && FeedMob::CLI.json?
+            raise Error.new(code: 'invalid_input', message: '--raw cannot be combined with --json.')
+          end
+          return unless URI.parse(service.base_url).path == '/rails' && path.match?(%r{\A/rails(?:/|\?|$)})
+
+          raise Error.new(code: 'invalid_path',
+                          message: 'Pixel base URL already includes /rails; use /api/v1/... paths.')
+        end
 
         def service_name = 'pixel'
       end
