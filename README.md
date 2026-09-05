@@ -11,7 +11,7 @@ fm version
 fm pixel auth login [--token-stdin]
 fm pixel auth status
 fm pixel auth logout
-fm pixel request get <path>
+fm pixel request get <path> [--raw]
 fm time-off auth login [--token-stdin]
 fm time-off auth status
 fm time-off auth logout
@@ -87,6 +87,20 @@ fm pixel request get /api/v1/cli/me
 `request get` only accepts relative paths starting with a single `/`;
 absolute URLs and `//host` paths are rejected so tokens can never leak to an
 unconfigured host. Only GET requests are exposed.
+
+Pixel paths are relative to the configured base URL, which already ends in
+`/rails`. When copying a path from the Pixel API documentation, remove its
+leading `/rails`. Use `--json` to read the response under `data.response`, or
+`--raw` to write the exact response body to stdout (for example, redirect a CSV
+export to a file). `--raw` and `--json` cannot be combined. Raw requests still
+report API errors and exit nonzero; check the exit status before using an export.
+A shell redirect can create or truncate the destination even when the request fails.
+
+Pixel logout removes locally stored credentials even when remote revocation
+fails. Such failures retain a nonzero exit status; JSON error details include
+`local_removed` and `remote_revoked`. Environment credentials cannot be removed
+by the CLI: unset `FEEDMOB_PIXEL_TOKEN` yourself. If revocation failed due to a
+network or permission error, the remote token may remain active.
 
 Time Off journal updates use the existing `request` command. Write the JSON
 request body to a file, then call the documented upsert endpoint; it always

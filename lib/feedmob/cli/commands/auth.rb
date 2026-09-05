@@ -65,8 +65,7 @@ module FeedMob
           end
 
           remote_revoked = !service.revoke_path.nil?
-          revoke_remote_token(service, credential.value) if remote_revoked
-          local_removed = local_credential_source?(credential.source) && runtime.credentials.delete(service)
+          local_removed = revoke_and_remove(credential, remote_revoked)
           payload = {
             service: service.name,
             logged_out: local_removed || remote_revoked,
@@ -81,6 +80,23 @@ module FeedMob
         end
 
         private
+
+        def revoke_and_remove(credential, remote_revoked)
+          begin
+            revoke_remote_token(service, credential.value) if remote_revoked
+          rescue Error => e
+            local_removed = remove_local_credential(credential)
+            raise Error.new(
+              code: e.code, message: "#{e.message} Local credential removed: #{local_removed}.",
+              details: (e.details || {}).merge(local_removed:, remote_revoked: false), exit_status: e.exit_status
+            )
+          end
+          remove_local_credential(credential)
+        end
+
+        def remove_local_credential(credential)
+          local_credential_source?(credential.source) && runtime.credentials.delete(service)
+        end
 
         def revoke_remote_token(service, token)
           runtime.client(service).request(method: :delete, path: service.revoke_path, token:)

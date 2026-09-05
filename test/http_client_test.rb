@@ -46,6 +46,22 @@ class HttpClientTest < Minitest::Test
     )
   end
 
+  def test_raw_preserves_body_bytes_and_still_raises_api_errors
+    body = "{ \"advertisers\": [] }\n"
+    transport = FakeTransport.new(response: { status: 200, headers: {}, body: })
+    client = FeedMob::CLI::HTTP::Client.new(service: @service, transport:)
+    assert_equal body, client.request(
+      method: :get, path: '/api/v1/dashboard_api/advertisers', token: 'fmpat_sentinel', raw: true
+    ).data
+
+    transport = FakeTransport.new(response: { status: 401, headers: {}, body: '{"error":{"code":"invalid_token"}}' })
+    client = FeedMob::CLI::HTTP::Client.new(service: @service, transport:)
+    error = assert_raises(FeedMob::CLI::Error) do
+      client.request(method: :get, path: '/api/v1/dashboard_api/advertisers', token: 'fmpat_sentinel', raw: true)
+    end
+    assert_equal 'invalid_token', error.code
+  end
+
   def test_non_json_response_is_preserved_as_text
     transport = FakeTransport.new(response: { status: 200, headers: {}, body: 'ok' })
     client = FeedMob::CLI::HTTP::Client.new(service: @service, transport:)

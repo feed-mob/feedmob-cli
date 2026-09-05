@@ -379,6 +379,57 @@ class CliCommandsTest < Minitest::Test
     )
   end
 
+  def test_pixel_logout_cleans_local_credentials_when_remote_revocation_fails
+    %w[invalid_token forbidden network_error].each do |code|
+      %w[keychain encrypted_file env].each do |source|
+        credentials = FakeCredentials.new(credential: FeedMob::CLI::Credential.new(value: 'fmpat_sentinel', source:))
+        client = Object.new
+        client.define_singleton_method(:request) do |**|
+          raise FeedMob::CLI::Error.new(code:, message: 'Revocation failed.')
+        end
+        use_runtime(credentials:, clients: { 'pixel' => client })
+
+        stdout, _, status = run_cli('--json', 'pixel', 'auth', 'logout')
+
+        assert_equal 1, status
+        assert_equal(source == 'env' ? [] : ['pixel'], credentials.deleted)
+        assert_equal code, JSON.parse(stdout).dig('error', 'code')
+        assert_equal(source != 'env', JSON.parse(stdout).dig('error', 'details', 'local_removed'))
+        assert_equal false, JSON.parse(stdout).dig('error', 'details', 'remote_revoked')
+      end
+    end
+  end
+
+  def test_pixel_raw_export_writes_only_csv_bytes
+    csv = "index,category\r\n1,sample\r\n"
+    client = FakeClient.new([FeedMob::CLI::HTTP::Response.new(status: 200, headers: {}, data: csv)])
+    use_runtime(credentials: FakeCredentials.new, clients: { 'pixel' => client })
+    path = '/api/v1/dashboard_api/categories/sample/records/export?advertiser=sample'
+
+    stdout, stderr, status = run_cli('pixel', 'request', 'get', path, '--raw')
+
+    assert_equal 0, status
+    assert_empty stderr
+    assert_equal csv, stdout
+    assert_equal true, client.requests.first.fetch(:raw)
+    assert_equal path, client.requests.first.fetch(:path)
+  end
+
+  def test_pixel_rejects_duplicate_prefix_and_conflicting_output_flags_before_request
+    client = FakeClient.new
+    use_runtime(credentials: FakeCredentials.new, clients: { 'pixel' => client })
+    [
+      ['/rails/api/v1/dashboard_api/advertisers', [], 'invalid_path'],
+      ['/api/v1/dashboard_api/advertisers', %w[--raw --json], 'invalid_input']
+    ].each do |path, flags, code|
+      stdout, stderr, status = run_cli('--json', 'pixel', 'request', 'get', path, *flags)
+      assert_equal 1, status
+      assert_empty stderr
+      assert_equal code, JSON.parse(stdout).dig('error', 'code')
+    end
+    assert_empty client.requests
+  end
+
   private
 
   def use_runtime(credentials:, clients:)
