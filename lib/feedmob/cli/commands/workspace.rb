@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
+require 'json'
 require_relative 'base'
-
 module FeedMob
   module CLI
     module Commands
@@ -13,9 +13,25 @@ module FeedMob
 
       class WorkspaceOpenapi < WorkspaceBase
         desc 'Fetch the OpenAPI schema for FeedMob Workspace'
+        option :raw, type: :boolean, default: false, desc: 'Write the response body verbatim (incompatible with --json)'
 
-        def call(**)
+        def call(raw: false, **)
+          if raw && FeedMob::CLI.json?
+            raise Error.new(code: 'invalid_input', message: '--raw cannot be combined with --json.')
+          end
+
           credential = credential!(service)
+          if raw
+            response = runtime.client(service).request(
+              method: :get,
+              path: '/api/v1/openapi',
+              token: credential.value,
+              raw: true
+            )
+            (@out || $stdout).write(response.data)
+            return
+          end
+
           response = runtime.client(service).request(
             method: :get,
             path: '/api/v1/openapi',
@@ -28,7 +44,7 @@ module FeedMob
               status: response.status,
               response: response.data
             },
-            message: "GET /api/v1/openapi returned HTTP #{response.status}."
+            message: JSON.pretty_generate(response.data)
           )
         end
       end

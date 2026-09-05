@@ -219,6 +219,46 @@ class CliCommandsTest < Minitest::Test
     assert_empty workspace_client.requests
   end
 
+  def test_workspace_request_get_raw_writes_verbatim_response
+    credentials = FakeCredentials.new(
+      credential: FeedMob::CLI::Credential.new(value: 'fmapat_workspace', source: 'keychain')
+    )
+    workspace_client = FakeClient.new(
+      [FeedMob::CLI::HTTP::Response.new(status: 200, headers: {}, data: '{"user":{"id":42}}')]
+    )
+    use_runtime(
+      credentials:,
+      clients: { 'pixel' => FakeClient.new, 'time-off' => FakeClient.new, 'workspace' => workspace_client }
+    )
+
+    stdout, stderr, status = run_cli('workspace', 'request', 'get', '/api/v1/me', '--raw')
+
+    assert_equal 0, status
+    assert_empty stderr
+    assert_equal '{"user":{"id":42}}', stdout
+    assert_equal(
+      { method: :get, path: '/api/v1/me', token: 'fmapat_workspace', raw: true },
+      workspace_client.requests.fetch(0)
+    )
+  end
+
+  def test_workspace_request_get_rejects_raw_combined_with_json
+    credentials = FakeCredentials.new(
+      credential: FeedMob::CLI::Credential.new(value: 'fmapat_workspace', source: 'keychain')
+    )
+    workspace_client = FakeClient.new
+    use_runtime(
+      credentials:,
+      clients: { 'pixel' => FakeClient.new, 'time-off' => FakeClient.new, 'workspace' => workspace_client }
+    )
+
+    stdout, _stderr, status = run_cli('workspace', 'request', 'get', '/api/v1/me', '--raw', '--json')
+
+    assert_equal 1, status
+    assert_equal 'invalid_input', JSON.parse(stdout).dig('error', 'code')
+    assert_empty workspace_client.requests
+  end
+
   def test_workspace_openapi_fetches_the_versioned_openapi_schema
     credentials = FakeCredentials.new(
       credential: FeedMob::CLI::Credential.new(value: 'fmapat_workspace', source: 'keychain')
@@ -273,6 +313,66 @@ class CliCommandsTest < Minitest::Test
 
     assert_equal 1, status
     assert_empty workspace_client.requests
+  end
+
+  def test_workspace_openapi_raw_writes_verbatim_schema
+    credentials = FakeCredentials.new(
+      credential: FeedMob::CLI::Credential.new(value: 'fmapat_workspace', source: 'keychain')
+    )
+    workspace_client = FakeClient.new(
+      [FeedMob::CLI::HTTP::Response.new(status: 200, headers: {}, data: '{"openapi":"3.0.0"}')]
+    )
+    use_runtime(
+      credentials:,
+      clients: { 'pixel' => FakeClient.new, 'time-off' => FakeClient.new, 'workspace' => workspace_client }
+    )
+
+    stdout, stderr, status = run_cli('workspace', 'openapi', '--raw')
+
+    assert_equal 0, status
+    assert_empty stderr
+    assert_equal '{"openapi":"3.0.0"}', stdout
+    assert_equal(
+      { method: :get, path: '/api/v1/openapi', token: 'fmapat_workspace', raw: true },
+      workspace_client.requests.fetch(0)
+    )
+  end
+
+  def test_workspace_openapi_rejects_raw_combined_with_json
+    credentials = FakeCredentials.new(
+      credential: FeedMob::CLI::Credential.new(value: 'fmapat_workspace', source: 'keychain')
+    )
+    workspace_client = FakeClient.new
+    use_runtime(
+      credentials:,
+      clients: { 'pixel' => FakeClient.new, 'time-off' => FakeClient.new, 'workspace' => workspace_client }
+    )
+
+    stdout, _stderr, status = run_cli('workspace', 'openapi', '--raw', '--json')
+
+    assert_equal 1, status
+    assert_equal 'invalid_input', JSON.parse(stdout).dig('error', 'code')
+    assert_empty workspace_client.requests
+  end
+
+  def test_workspace_openapi_pretty_prints_schema_in_human_mode
+    credentials = FakeCredentials.new(
+      credential: FeedMob::CLI::Credential.new(value: 'fmapat_workspace', source: 'keychain')
+    )
+    schema = { 'openapi' => '3.0.0', 'info' => { 'title' => 'FeedMob Admin API' } }
+    workspace_client = FakeClient.new(
+      [FeedMob::CLI::HTTP::Response.new(status: 200, headers: {}, data: schema)]
+    )
+    use_runtime(
+      credentials:,
+      clients: { 'pixel' => FakeClient.new, 'time-off' => FakeClient.new, 'workspace' => workspace_client }
+    )
+
+    stdout, stderr, status = run_cli('workspace', 'openapi')
+
+    assert_equal 0, status
+    assert_empty stderr
+    assert_equal "#{JSON.pretty_generate(schema)}\n", stdout
   end
 
   def test_pixel_logout_revokes_the_remote_token_then_deletes_local_keychain_value

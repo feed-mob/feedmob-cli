@@ -36,8 +36,8 @@ fm pages request get <path>
 fm workspace auth login [--token-stdin]
 fm workspace auth status
 fm workspace auth logout
-fm workspace openapi
-fm workspace request get <api-v1-path>
+fm workspace openapi [--raw]
+fm workspace request get <api-v1-path> [--raw]
 ```
 
 ## Installation
@@ -138,12 +138,15 @@ have an approved SSO account. A `401 Unauthorized` response can mean that the
 token is invalid, expired, or revoked, or that the account is not approved.
 Workspace requests are GET-only and must stay under `/api/v1/`. Use
 `fm workspace openapi` (or `fm workspace schema`) to fetch the machine-readable
-OpenAPI specification for discovery and self-description.
+OpenAPI specification for discovery and self-description. Both `openapi` and
+`request get` accept `--raw` to output the verbatim response body without JSON
+envelopes, suitable for redirection or piping.
 
 ```sh
 fm workspace auth login
 fm workspace request get /api/v1/me
 fm workspace openapi
+fm workspace openapi --raw > openapi.json
 ```
 
 `publish` requires `--owner` and `--html-file`. `update` accepts an HTML
