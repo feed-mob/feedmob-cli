@@ -36,6 +36,7 @@ fm pages request get <path>
 fm workspace auth login [--token-stdin]
 fm workspace auth status
 fm workspace auth logout
+fm workspace openapi
 fm workspace request get <api-v1-path>
 ```
 
@@ -135,13 +136,14 @@ shared operational data. Obtain a personal access token from FeedMob SSO, then
 authenticate without placing the token in shell history. The token owner must
 have an approved SSO account. A `401 Unauthorized` response can mean that the
 token is invalid, expired, or revoked, or that the account is not approved.
-Workspace requests are GET-only and must stay under `/api/v1/`. Consult the
-SSO-protected API Reference for available resources rather than treating CLI
-help as an endpoint catalog.
+Workspace requests are GET-only and must stay under `/api/v1/`. Use
+`fm workspace openapi` (or `fm workspace schema`) to fetch the machine-readable
+OpenAPI specification for discovery and self-description.
 
 ```sh
 fm workspace auth login
 fm workspace request get /api/v1/me
+fm workspace openapi
 ```
 
 `publish` requires `--owner` and `--html-file`. `update` accepts an HTML

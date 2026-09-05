@@ -6,6 +6,7 @@ require_relative 'commands/doctor'
 require_relative 'commands/pages'
 require_relative 'commands/request'
 require_relative 'commands/version'
+require_relative 'commands/workspace'
 
 module FeedMob
   module CLI
@@ -73,6 +74,8 @@ module FeedMob
           auth.register 'status', WorkspaceAuthStatus
           auth.register 'logout', WorkspaceAuthLogout
         end
+        workspace.register 'openapi', WorkspaceOpenapi
+        workspace.register 'schema', WorkspaceOpenapi
         workspace.register 'request' do |request|
           request.register 'get', WorkspaceRequestGet
         end
