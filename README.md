@@ -116,12 +116,14 @@ fm pages publish --owner growth --html-file report.html --visibility unlisted
 fm pages asset upload chart.png
 ```
 
-FeedMob Workspace is the internal, read-only API for shared operational data.
-Obtain a personal access token from FeedMob SSO, then authenticate without
-placing the token in shell history. Workspace requests are GET-only and must
-stay under `/api/v1/`; access to individual resources is enforced by the
-server-side Workspace privileges. Consult the SSO-protected API Reference for
-available resources rather than treating CLI help as an endpoint catalog.
+FeedMob Workspace is the CLI's read-only access to the FeedMob Admin API for
+shared operational data. Obtain a personal access token from FeedMob SSO, then
+authenticate without placing the token in shell history. The token owner must
+have an approved SSO account. A `401 Unauthorized` response can mean that the
+token is invalid, expired, or revoked, or that the account is not approved.
+Workspace requests are GET-only and must stay under `/api/v1/`. Consult the
+SSO-protected API Reference for available resources rather than treating CLI
+help as an endpoint catalog.
 
 ```sh
 fm workspace auth login
