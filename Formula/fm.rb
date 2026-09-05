@@ -6,25 +6,25 @@ class Fm < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.4.2/fm-darwin-arm64.tar.gz"
-      sha256 "ecb1f910bb7d10ea683712b7dc5ef3cd1edd6461976b391d635144fa6d68d37e"
+      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.4.3/fm-darwin-arm64.tar.gz"
+      sha256 "7ef3051229ebaae915f017d1a53f30f86bc73de72623138448940e1a9ff4c34f"
     end
 
     on_intel do
-      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.4.2/fm-darwin-x86_64.tar.gz"
-      sha256 "969d53bc46bbd16839ce6f96ff4bcab8ef99b93d93faf92422456472d48e4036"
+      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.4.3/fm-darwin-x86_64.tar.gz"
+      sha256 "1f121a09feed00c9be004edaaaea16776312d49ef4e45bed1f29df0d93f88d26"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.4.2/fm-linux-arm64.tar.gz"
-      sha256 "915d2f811fe18d4d7b45c5b83da4b05e790fe04a6cdb35d9789fe282c8c6e771"
+      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.4.3/fm-linux-arm64.tar.gz"
+      sha256 "7b6d028eeb70fcc91be9cf69bb5f0ac39b8946916de8a28bd030e4b41e614046"
     end
 
     on_intel do
-      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.4.2/fm-linux-x86_64.tar.gz"
-      sha256 "756d1c460199c5a7c85a5a8867f6de1c7fbd5c425c67c5dd36c2099ad63d0652"
+      url "https://github.com/feed-mob/feedmob-cli/releases/download/v0.4.3/fm-linux-x86_64.tar.gz"
+      sha256 "fc4c73a4c90777043b77f88ecb8a8acaeae39de3147122860d2435d9e27a125c"
     end
   end
 
