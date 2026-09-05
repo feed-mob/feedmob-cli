@@ -108,17 +108,26 @@ module FeedMob
 
       class WorkspaceRequestGet < RequestGet
         desc 'Perform an authenticated GET request against the FeedMob Workspace API'
+        option :raw, type: :boolean, default: false, desc: 'Write the response body verbatim (incompatible with --json)'
 
-        def call(path:, **)
-          validate_workspace_path!(path)
-          super
+        def call(path:, raw: false, **)
+          validate_workspace_path!(path, raw)
+          return super(path:) unless raw
+
+          credential = credential!(service)
+          response = runtime.client(service).request(method: :get, path:, token: credential.value, raw: true)
+          (@out || $stdout).write(response.data)
         end
 
         def service_name = 'workspace'
 
         private
 
-        def validate_workspace_path!(path)
+        def validate_workspace_path!(path, raw)
+          if raw && FeedMob::CLI.json?
+            raise Error.new(code: 'invalid_input', message: '--raw cannot be combined with --json.')
+          end
+
           return if path.to_s.start_with?('/api/v1/')
 
           raise Error.new(
