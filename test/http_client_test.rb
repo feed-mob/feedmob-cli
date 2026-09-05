@@ -133,4 +133,27 @@ class HttpClientTest < Minitest::Test
     assert_equal 'Credential expired.', error.message
     refute_includes error.message, 'fmpat_never-print-me'
   end
+
+  def test_workspace_unauthorized_error_explains_the_account_approval_requirement
+    workspace_service = FeedMob::CLI::Services.fetch('workspace', env: {})
+    transport = FakeTransport.new(
+      response: {
+        status: 401,
+        headers: { 'content-type' => 'application/json' },
+        body: '{"error":"Unauthorized"}'
+      }
+    )
+    client = FeedMob::CLI::HTTP::Client.new(service: workspace_service, transport:)
+
+    error = assert_raises(FeedMob::CLI::Error) do
+      client.request(method: :get, path: '/api/v1/me', token: 'fmapat_never-print-me')
+    end
+
+    expected_message = 'FeedMob Workspace could not authenticate with the FeedMob Admin API. ' \
+                       'Confirm that the personal access token is active and the FeedMob SSO account is approved.'
+    assert_equal 'http_error', error.code
+    assert_equal expected_message, error.message
+    assert_equal({ status: 401 }, error.details)
+    refute_includes error.message, 'fmapat_never-print-me'
+  end
 end

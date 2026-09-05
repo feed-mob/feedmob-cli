@@ -80,6 +80,8 @@ module FeedMob
         end
 
         def api_error(data, status)
+          return workspace_unauthorized_error if workspace_unauthorized?(status)
+
           remote_error = data['error'] if data.is_a?(Hash)
           if remote_error.is_a?(Hash)
             [remote_error['code'] || 'http_error', remote_error['message'] || default_api_error(status)]
@@ -101,6 +103,18 @@ module FeedMob
 
         def default_api_error(status)
           "#{@service.label} API returned HTTP #{status}."
+        end
+
+        def workspace_unauthorized?(status)
+          @service.name == 'workspace' && status == 401
+        end
+
+        def workspace_unauthorized_error
+          [
+            'http_error',
+            'FeedMob Workspace could not authenticate with the FeedMob Admin API. ' \
+            'Confirm that the personal access token is active and the FeedMob SSO account is approved.'
+          ]
         end
       end
     end
